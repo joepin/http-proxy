@@ -1,0 +1,3 @@
+/Users/joey/code/cornell/nds/2-http/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+/Users/joey/code/cornell/nds/2-http/cmake-build-debug/CMakeFiles/edit_cache.dir
+/Users/joey/code/cornell/nds/2-http/cmake-build-debug/CMakeFiles/2_http.dir
