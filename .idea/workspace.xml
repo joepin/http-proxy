@@ -11,7 +11,11 @@
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="5b52d1d4-66ca-497c-91fc-d662ae1ac894" name="Default Changelist" comment="" />
+    <list default="true" id="5b52d1d4-66ca-497c-91fc-d662ae1ac894" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/proxy" beforeDir="false" afterPath="$PROJECT_DIR$/proxy" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/proxy.c" beforeDir="false" afterPath="$PROJECT_DIR$/proxy.c" afterDir="false" />
+    </list>
     <ignored path="$PROJECT_DIR$/cmake-build-debug/" />
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -24,17 +28,20 @@
     <session id="976521010">
       <usages-collector id="statistics.lifecycle.project">
         <counts>
-          <entry key="project.closed" value="3" />
+          <entry key="project.closed" value="7" />
           <entry key="project.open.time.4" value="2" />
-          <entry key="project.open.time.6" value="2" />
-          <entry key="project.opened" value="4" />
+          <entry key="project.open.time.5" value="1" />
+          <entry key="project.open.time.6" value="4" />
+          <entry key="project.open.time.8" value="1" />
+          <entry key="project.opened" value="8" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.extensions.open">
         <counts>
-          <entry key="c" value="6" />
-          <entry key="h" value="2" />
+          <entry key="c" value="9" />
+          <entry key="h" value="5" />
           <entry key="jpg" value="1" />
+          <entry key="pl" value="1" />
           <entry key="sh" value="2" />
           <entry key="txt" value="1" />
         </counts>
@@ -43,18 +50,18 @@
         <counts>
           <entry key="CMakeLists.txt" value="1" />
           <entry key="Image" value="1" />
-          <entry key="ObjectiveC" value="8" />
-          <entry key="PLAIN_TEXT" value="2" />
+          <entry key="ObjectiveC" value="14" />
+          <entry key="PLAIN_TEXT" value="3" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.extensions.edit">
         <counts>
-          <entry key="c" value="4080" />
+          <entry key="c" value="5775" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.types.edit">
         <counts>
-          <entry key="ObjectiveC" value="4080" />
+          <entry key="ObjectiveC" value="5775" />
         </counts>
       </usages-collector>
     </session>
@@ -64,8 +71,8 @@
       <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/proxy.c">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="-222">
-              <caret line="79" column="24" lean-forward="true" selection-start-line="79" selection-start-column="24" selection-end-line="79" selection-end-column="24" />
+            <state relative-caret-position="240">
+              <caret line="124" column="43" lean-forward="true" selection-start-line="124" selection-start-column="43" selection-end-line="124" selection-end-column="43" />
               <folding>
                 <element signature="e#0#18#0" expanded="true" />
               </folding>
@@ -74,19 +81,19 @@
         </entry>
       </file>
       <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/driver.sh">
+        <entry file="file://$PROJECT_DIR$/csapp.c">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="-1495">
-              <caret line="143" column="36" selection-start-line="143" selection-start-column="36" selection-end-line="143" selection-end-column="36" />
+            <state relative-caret-position="223">
+              <caret line="842" column="8" selection-start-line="842" selection-start-column="8" selection-end-line="842" selection-end-column="8" />
             </state>
           </provider>
         </entry>
       </file>
       <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/csapp.c">
+        <entry file="file://$PROJECT_DIR$/driver.sh">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="-7">
-              <caret line="842" column="31" selection-start-line="842" selection-start-column="29" selection-end-line="842" selection-end-column="31" />
+            <state relative-caret-position="4110">
+              <caret line="274" column="11" selection-start-line="274" selection-start-column="11" selection-end-line="274" selection-end-column="11" />
             </state>
           </provider>
         </entry>
@@ -94,8 +101,8 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/tiny/tiny.c">
           <provider selected="true" editor-type-id="text-editor">
-            <state>
-              <caret line="212" column="24" selection-start-line="94" selection-end-line="212" selection-end-column="24" />
+            <state relative-caret-position="165">
+              <caret line="105" column="14" selection-start-line="105" selection-start-column="14" selection-end-line="105" selection-end-column="14" />
             </state>
           </provider>
         </entry>
@@ -103,8 +110,8 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/csapp.h">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="-7">
-              <caret line="34" column="2" selection-start-line="34" selection-start-column="2" selection-end-line="34" selection-end-column="2" />
+            <state relative-caret-position="870">
+              <caret line="58" column="8" selection-start-line="58" selection-start-column="8" selection-end-line="58" selection-end-column="8" />
             </state>
           </provider>
         </entry>
@@ -116,9 +123,13 @@
       <find>define</find>
     </findStrings>
   </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
   <component name="IdeDocumentHistory">
     <option name="CHANGED_PATHS">
       <list>
+        <option value="$PROJECT_DIR$/tiny/csapp.c" />
         <option value="$PROJECT_DIR$/proxy.c" />
       </list>
     </option>
@@ -135,6 +146,7 @@
     <option name="width" value="1440" />
     <option name="height" value="877" />
   </component>
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="ProjectView">
     <navigator proportions="" version="1">
       <foldersAlwaysOnTop value="true" />
@@ -155,6 +167,7 @@
     </panes>
   </component>
   <component name="PropertiesComponent">
+    <property name="SearchEverywhereHistoryKey" value="&#9;FILE&#9;file:///Users/joey/code/cornell/nds/2-http/tiny/tiny.c" />
     <property name="WebServerToolWindowFactoryState" value="true" />
     <property name="WebServerToolWindowPanel.toolwindow.highlight.mappings" value="true" />
     <property name="WebServerToolWindowPanel.toolwindow.highlight.symlinks" value="true" />
@@ -204,18 +217,22 @@
       <workItem from="1539784430944" duration="3084000" />
       <workItem from="1539881906177" duration="844000" />
       <workItem from="1539883800659" duration="853000" />
-      <workItem from="1540211541132" duration="14195000" />
+      <workItem from="1540211541132" duration="17198000" />
+      <workItem from="1540320734914" duration="128000" />
+      <workItem from="1540321291907" duration="6683000" />
+      <workItem from="1540572994686" duration="120000" />
+      <workItem from="1540581003562" duration="2119000" />
     </task>
     <servers />
   </component>
   <component name="TimeTrackingManager">
-    <option name="totallyTimeSpent" value="18976000" />
+    <option name="totallyTimeSpent" value="31029000" />
   </component>
   <component name="ToolWindowManager">
     <frame x="0" y="23" width="1440" height="877" extended-state="0" />
     <editor active="true" />
     <layout>
-      <window_info content_ui="combo" id="Project" order="0" visible="true" weight="0.2532189" />
+      <window_info active="true" content_ui="combo" id="Project" order="0" visible="true" weight="0.24177396" />
       <window_info id="Structure" order="1" side_tool="true" weight="0.25" />
       <window_info id="Favorites" order="2" side_tool="true" />
       <window_info anchor="bottom" id="Message" order="0" />
@@ -225,13 +242,13 @@
       <window_info anchor="bottom" id="Cvs" order="4" weight="0.25" />
       <window_info anchor="bottom" id="Inspection" order="5" weight="0.4" />
       <window_info anchor="bottom" id="TODO" order="6" />
-      <window_info anchor="bottom" id="File Transfer" order="7" weight="0.084076434" />
+      <window_info anchor="bottom" id="File Transfer" order="7" visible="true" weight="0.084076434" />
       <window_info anchor="bottom" id="Database Changes" order="8" show_stripe_button="false" />
       <window_info anchor="bottom" id="Messages" order="9" weight="0.3299363" />
       <window_info anchor="bottom" id="Terminal" order="10" />
       <window_info anchor="bottom" id="Event Log" order="11" side_tool="true" />
       <window_info anchor="bottom" id="Version Control" order="12" show_stripe_button="false" />
-      <window_info anchor="bottom" id="CMake" order="13" weight="0.3299363" />
+      <window_info anchor="bottom" id="CMake" order="13" weight="0.12738854" />
       <window_info anchor="right" id="Commander" internal_type="SLIDING" order="0" type="SLIDING" weight="0.4" />
       <window_info anchor="right" id="Ant Build" order="1" weight="0.25" />
       <window_info anchor="right" content_ui="combo" id="Hierarchy" order="2" weight="0.25" />
@@ -256,13 +273,6 @@
     <entry file="file://$PROJECT_DIR$/tiny/godzilla.jpg">
       <provider selected="true" editor-type-id="images" />
     </entry>
-    <entry file="file://$PROJECT_DIR$/tiny/tiny.c">
-      <provider selected="true" editor-type-id="text-editor">
-        <state>
-          <caret line="212" column="24" selection-start-line="94" selection-end-line="212" selection-end-column="24" />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/CMakeLists.txt">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="150">
@@ -270,38 +280,62 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/csapp.c">
+    <entry file="file:///Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.14.sdk/usr/include/unistd.h">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="-7">
-          <caret line="842" column="31" selection-start-line="842" selection-start-column="29" selection-end-line="842" selection-end-column="31" />
+        <state relative-caret-position="253">
+          <caret line="494" column="9" selection-start-line="494" selection-start-column="9" selection-end-line="494" selection-end-column="9" />
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/tiny/csapp.c">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="642">
-          <caret line="916" column="8" selection-start-line="916" selection-start-column="8" selection-end-line="916" selection-end-column="8" />
-        </state>
-      </provider>
+    <entry file="file://$PROJECT_DIR$/port-for-user.pl">
+      <provider selected="true" editor-type-id="text-editor" />
     </entry>
-    <entry file="file://$PROJECT_DIR$/csapp.h">
+    <entry file="file:///Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.14.sdk/usr/include/netdb.h">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="-7">
-          <caret line="34" column="2" selection-start-line="34" selection-start-column="2" selection-end-line="34" selection-end-column="2" />
+        <state relative-caret-position="231">
+          <caret line="274" column="17" selection-start-line="274" selection-start-column="17" selection-end-line="274" selection-end-column="17" />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/driver.sh">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="-1495">
-          <caret line="143" column="36" selection-start-line="143" selection-start-column="36" selection-end-line="143" selection-end-column="36" />
+        <state relative-caret-position="4110">
+          <caret line="274" column="11" selection-start-line="274" selection-start-column="11" selection-end-line="274" selection-end-column="11" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/csapp.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="870">
+          <caret line="58" column="8" selection-start-line="58" selection-start-column="8" selection-end-line="58" selection-end-column="8" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/tiny/csapp.c">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="502">
+          <caret line="896" column="5" selection-start-line="896" selection-start-column="5" selection-end-line="896" selection-end-column="5" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/csapp.c">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="223">
+          <caret line="842" column="8" selection-start-line="842" selection-start-column="8" selection-end-line="842" selection-end-column="8" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/tiny/tiny.c">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="165">
+          <caret line="105" column="14" selection-start-line="105" selection-start-column="14" selection-end-line="105" selection-end-column="14" />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/proxy.c">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="-222">
-          <caret line="79" column="24" lean-forward="true" selection-start-line="79" selection-start-column="24" selection-end-line="79" selection-end-column="24" />
+        <state relative-caret-position="240">
+          <caret line="124" column="43" lean-forward="true" selection-start-line="124" selection-start-column="43" selection-end-line="124" selection-end-column="43" />
           <folding>
             <element signature="e#0#18#0" expanded="true" />
           </folding>

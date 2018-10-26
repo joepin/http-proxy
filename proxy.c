@@ -4,7 +4,9 @@
 
 void doit(int);
 int read_requesthdrs(rio_t *rp, char *heads[], int size);
-char* build_http_request(char *method, char *uri, char **heads);
+char* build_http_request(char *method, char *uri, char **heads, char *host, char *port);
+int make_request(char *req, char *host, char *port, char *buf);
+void send_response(int fd, char*buf);
 int parse_destination(char *dest, char *proto, char *host, char *port, char *uri);
 int parse_uri(char *uri, char *filename, char *cgiargs);
 void serve_static(int fd, char *filename, int filesize);
@@ -19,11 +21,11 @@ void clienterror(int fd, char *cause, char *errnum,
 #define MAX_HEADERS 20
 
 /* You won't lose style points for including this long line in your code */
-static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
+static const char *user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3";
 
 int main(int argc, char **argv)
 {
-  printf("%s", user_agent_hdr);
+  printf("%s", user_agent);
 
   int listenfd, connfd;
   char hostname[MAXLINE], port[MAXLINE];
@@ -58,6 +60,7 @@ int main(int argc, char **argv)
 
 /*
  * doit - handle one HTTP request/response transaction
+ * this is the main driver of a single lifecycle
  */
 /* $begin doit */
 void doit(int fd)
@@ -74,7 +77,7 @@ void doit(int fd)
     sscanf(buf, "%s %s %s", method, destination, version);
     printf("after scanf:\n%s, %s, %s:\n", method, destination, version);
     printf("compared: %d\n", strcasecmp(method, "GET"));
-    if (strcasecmp(method, "GET") && strcasecmp(method, "CONNECT")) {
+    if (strcasecmp(method, "GET")) {
         printf("this is an error\n");
         clienterror(fd, method, "501", "Not Implemented",
                     "Proxy does not implement this method");
@@ -90,10 +93,53 @@ void doit(int fd)
 
     // TODO: parse uri path to cache objects with
 
-    char *http_request = build_http_request(method, destination, heads);
+    char *host = malloc(MAXLINE);
+    char *port = malloc(10);
+    char req_buf[MAXLINE];
+    char *http_request = build_http_request(method, destination, heads, host, port);
+    make_request(http_request, host, port, req_buf);
+    send_response(fd, req_buf);
+    Close(fd);
+
 
 }
 /* $end doit */
+
+int make_request(char *req, char *host, char *port, char *buf) {
+    int serverfd;
+    rio_t rio;
+
+    printf("\n*********MAKING REQUEST*********\n\n");
+    printf("host: %s, port: %s\n", host, port);
+    printf("req: %s\n", req);
+    serverfd = open_clientfd(host, port);
+//    printf("%d\n", errno);
+//    printf("serverfd %d\n", serverfd);
+    Rio_writen(serverfd, req, strlen(req));
+    printf("wrote request\n");
+
+    int readAllData = 0;
+    Rio_readinitb(&rio, serverfd);
+    while(!readAllData) {
+        if (!Rio_readlineb(&rio, buf, MAXLINE)) {
+            printf("here error returning");
+            return -1;
+        }
+        printf("Hello bellow:\n%s", buf);
+        if (strcmp(buf, "\r\n\r\n")) {
+            readAllData = 1;
+        }
+    }
+    return serverfd;
+}
+
+void send_response(int clientfd, char *res) {
+//    rio_t rio;
+    printf("\n*********SENDING RESPONSE*********\n\n");
+    printf("res: %s\n", res);
+    Rio_writen(clientfd, res, strlen(res));
+    printf("wrote response\n");
+}
 
 /*
  * read_requesthdrs - read HTTP request headers
@@ -125,31 +171,60 @@ int read_requesthdrs(rio_t *rp, char **hs, int size)
  * build_http_request - generate a new request to send to server
  * */
 
-char* build_http_request(char *method, char *dest, char **heads) {
+char* build_http_request(char *method, char *dest, char **heads, char *host, char *port) {
     char *protocol = malloc(10);
-    char *host = malloc(MAXLINE);
-    char *port = malloc(10);
     char *uri = malloc(MAXLINE);
 
     char *req = malloc(MAXLINE);
 
     int have_host = parse_destination(dest, protocol, host, port, uri);
     if (have_host > 0) {
-//        printf("%s\n", protocol);
-//        printf("%s\n", host);
-//        printf("%s\n", port);
-//        printf("%s\n", uri);
-        if (strlen(port) == 0) {
-            sprintf(req, "%s %s://%s%s HTTP/1.0\r\n", method, protocol, host, uri);
-            printf("if req is:\n%s\n", req);
-        } else {
-            sprintf(req, "%s %s://%s:%s%s HTTP/1.0\r\n", method, protocol, host, port, uri);
-            printf("else req is:\n%s\n", req);
-        }
-    } else {
-        // TODO: get host from headers
+        printf("Have host\n");
+        printf("%s\n", protocol);
+        printf("%s\n", host);
+        printf("%s\n", port);
         printf("%s\n", uri);
+    } else {
+        char *host_header = heads[0] + 6;
+        printf("%s\n", host_header);
+        printf("%s\n", uri);
+        char *maybe_port = malloc(6);
+        maybe_port = strstr(host_header, ":");
+        if (maybe_port == NULL) {
+            memcpy(host, host_header, strlen(host_header));
+            // if port is empty, set it to default of 80
+            strcpy(port, "80");
+        } else {
+            printf("%s\n", maybe_port);
+            int diff = (int) (maybe_port - host_header);
+            memcpy(host, host_header, diff);
+            maybe_port += 1;
+            memcpy(port, maybe_port, strlen(maybe_port));
+        }
+        printf("Host: %s; Port: %s\n", host, port);
+        memcpy(protocol, "http", strlen("http"));
     }
+
+    if (strlen(port) == 0) {
+        printf("method: %s\n", method);
+        printf("protocol: %s\n", protocol);
+        printf("host: %s\n", host);
+        printf("uri: %s\n", uri);
+
+    } else {
+        printf("method: %s\n", method);
+        printf("protocol: %s\n", protocol);
+        printf("host: %s\n", host);
+        printf("port: %s\n", port);
+        printf("uri: %s\n", uri);
+    }
+
+    sprintf(req, "%s %s HTTP/1.0\r\n", method, uri);
+    sprintf(req, "%sHost: %s\r\n", req, host);
+    sprintf(req, "%sUser-Agent: %s\r\n", req, user_agent);
+    sprintf(req, "%sConnection: close\r\n", req);
+    sprintf(req, "%sProxy-Connection: close\r\n\r\n", req);
+    printf("req is:\n%s\n", req);
 
     return req;
 }
@@ -194,50 +269,17 @@ int parse_destination(char *dest, char *proto, char *host, char *port, char *uri
     if (maybe_port == NULL) {
         // printf("here\n");
         memcpy(host, unclean_host, strlen(unclean_host));
-        memset(port, 0, sizeof(*port));
+        strcpy(port, "80");
     } else {
         diff = (int) (maybe_port - unclean_host);
         memcpy(host, unclean_host, diff);
         maybe_port += 1;
         memcpy(port, maybe_port, strlen(maybe_port));
-
     }
 
     memcpy(uri, no_host, strlen(no_host));
     return 1;
 }
-
-/*
- * parse_uri - parse URI into filename and CGI args
- *             return 0 if dynamic content, 1 if static
- */
-/* $begin parse_uri */
-int parse_uri(char *uri, char *filename, char *cgiargs)
-{
-    char *ptr;
-
-    if (!strstr(uri, "cgi-bin")) {  /* Static content */ //line:netp:parseuri:isstatic
-        strcpy(cgiargs, "");                             //line:netp:parseuri:clearcgi
-        strcpy(filename, ".");                           //line:netp:parseuri:beginconvert1
-        strcat(filename, uri);                           //line:netp:parseuri:endconvert1
-        if (uri[strlen(uri)-1] == '/')                   //line:netp:parseuri:slashcheck
-            strcat(filename, "home.html");               //line:netp:parseuri:appenddefault
-        return 1;
-    }
-    else {  /* Dynamic content */                        //line:netp:parseuri:isdynamic
-        ptr = index(uri, '?');                           //line:netp:parseuri:beginextract
-        if (ptr) {
-            strcpy(cgiargs, ptr+1);
-            *ptr = '\0';
-        }
-        else
-            strcpy(cgiargs, "");                         //line:netp:parseuri:endextract
-        strcpy(filename, ".");                           //line:netp:parseuri:beginconvert2
-        strcat(filename, uri);                           //line:netp:parseuri:endconvert2
-        return 0;
-    }
-}
-/* $end parse_uri */
 
 /*
  * serve_static - copy a file back to the client
