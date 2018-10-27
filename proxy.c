@@ -11,21 +11,20 @@ int parse_destination(char *dest, char *proto, char *host, char *port, char *uri
 int parse_uri(char *uri, char *filename, char *cgiargs);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 
-/* Recommended max cache and object sizes */
-#define MAX_CACHE_SIZE 1049000
-#define MAX_OBJECT_SIZE 102400
-/* Max number of headers supported */
-#define MAX_HEADERS 20
+#define MAX_HEADERS 20          /* Max number of headers supported */
+#define MAX_CACHE_SIZE 1049000  /* Recommended max cache size      */
+#define MAX_OBJECT_SIZE 102400  /* Recommended max object size     */
 
 /* You won't lose style points for including this long line in your code */
 static const char *user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3";
 
-int main(int argc, char **argv)
-{
-    int listenfd, connfd;
-    char hostname[MAXLINE], port[MAXLINE];
-    socklen_t clientlen;
-    struct sockaddr_storage clientaddr;
+int main(int argc, char **argv) {
+    int listenfd;                        /* File descriptor for listening socket */
+    int connfd;                          /* File descriptor for client socket    */
+    char port[MAXLINE];                  /* Client port     */
+    char hostname[MAXLINE];              /* Client hostname */
+    socklen_t clientlen;                 /* Client address info */
+    struct sockaddr_storage clientaddr;  /* Client address info */
 
     /* Check command line args */
     if (argc != 2) {
@@ -67,8 +66,7 @@ int main(int argc, char **argv)
  * This is the main driver of a single lifecycle.
  * Adopted from tiny.c.
  */
-void doit(int fd)
-{
+void doit(int fd) {
     printf("\n*********ACCEPTING CONNECTION*********\n\n");
 
     char buf[MAXLINE], method[MAXLINE], destination[MAXLINE], version[MAXLINE];
@@ -118,7 +116,6 @@ void doit(int fd)
 
     /* @TODO: Add URI to cache */
 
-    /* @TODO: Need Malloc? */
     char *host = Malloc(MAXLINE);
     /* Accept ports between 1,024 and 65,536 */
     char *port = Malloc(3);
@@ -133,6 +130,8 @@ void doit(int fd)
     /* Send the request */
     send_response(fd, req_buf);
     
+    /* @TODO: Free memory */
+
 }
 
 //////////
@@ -192,8 +191,7 @@ void send_response(int clientfd, char *res) {
 /*
  * Read HTTP request headers.
  */
-int read_requesthdrs(rio_t *rp, char **hs, int size)
-{
+int read_requesthdrs(rio_t *rp, char **hs, int size) {
     int count = 0;
 
     /* Malloc and read a header line */
@@ -352,9 +350,7 @@ int parse_destination(char *dest, char *proto, char *host, char *port, char *uri
  * Return an error message to the client.
  * Adopted from tiny.c.
  */
-void clienterror(int fd, char *cause, char *errnum,
-                 char *shortmsg, char *longmsg)
-{
+void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg) {
     char buf[MAXLINE], body[MAXBUF];
 
     /* Build the HTTP response body */
