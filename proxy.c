@@ -1,15 +1,17 @@
 #include <stdio.h>
 #include <string.h>
 #include "csapp.h"
+// #include "proxycache.h"
 
 // @TODO
 // - Threads
 // - Error handling
 // - Cache
 
-#define MAX_HEADERS 20          /* Max number of headers supported */
-#define MAX_CACHE_SIZE 1049000  /* Recommended max cache size      */
-#define MAX_OBJECT_SIZE 102400  /* Recommended max object size     */
+#define MAX_CACHE_SIZE 1049000   /* Recommended max cache byte size  */
+#define MAX_OBJECT_SIZE 102400   /* Recommended max object byte size */
+#define BODY_SIZE 4096           /* Default response body size       */ 
+#define MAX_HEADERS 20           /* Max number of headers supported  */
 
 //////////
 
@@ -197,67 +199,54 @@ int forward_request(char *req, char *host, char *port, char *buf) {
 void forward_response(int clientfd, int serverfd, char *res) {
     printf("\n*********FORWARDING RESPONSE*********\n\n");
 
-    rio_t server_rio;         /* Robust wrapper for server IO */
-    char header_buf[MAXLINE]; /* Buffer for response headers  */
-    char resp_len[MAXLINE];   /* Response Content-Length buf  */
-    char *get_resp_status;    /* Response Status              */
-    char *get_resp_len;       /* Response Content-Length      */
-    char *get_resp_end;       /* Response Content-Length end  */
-    size_t resp_body_len;     /* Number of bytes in response body */
+    rio_t server_rio;               /* Robust wrapper for server IO                    */
+    size_t bytes_read = 0;          /* Number of bytes read from socket response       */
+    int add_to_cache  = 1;          /* T/F if object should be added to the cache      */
+    size_t total_bytes_read = 0;    /* Total number of bytes read from socket response */
 
-    /* Associate client socket connection file descriptor with buffer */
+    /* Associate client socket file descriptor with buffer */
     Rio_readinitb(&server_rio, serverfd);
 
-    /* Read "Status" header */
-    Rio_readlineb(&server_rio, header_buf, MAXLINE);
+    /* Local buffer for reading each socket response */
+    char buf[BODY_SIZE];
 
-    /* Check "Status" */
-    get_resp_status = strstr(header_buf, "200");
+    /* Local buffer of entire object */
+    char resp_buf[MAX_OBJECT_SIZE];
+    memset(resp_buf, 0, MAX_OBJECT_SIZE);
 
-    /* @TODO - Error checking */
-    if (get_resp_status == NULL) {
-        printf("forward_response: Server response not equal to 200: %s\n", header_buf);       
-    }
-
-    /* Read remaining headers to get "Content-Length" */
-    int count = 0;
-    while(strcmp(header_buf, "\r\n") && count < MAX_HEADERS) { 
-        Rio_readlineb(&server_rio, header_buf, MAXLINE);
-
-        /* Get the the Content-Length if it exists */
-        get_resp_len = strstr(header_buf, "Content-Length");
-
-        if (get_resp_len != NULL) {
-            /* Get starting position of "Content-Length" value */
-            get_resp_len = (strstr(header_buf, ":") + 2);
-            get_resp_end = strstr(header_buf, "\r\n");
-            size_t diff1 = (get_resp_len - header_buf);
-            size_t diff2 = (get_resp_end - get_resp_len);
-
-            /* Get the "Content-Length" value */
-            memcpy(resp_len, (header_buf + diff1), diff2);
+    /* Read in response */
+    while (1) {
+        if ((bytes_read = Rio_readn(serverfd, buf, BODY_SIZE)) == -1) {
+            fprintf(stderr, "forward_response: Error reading server response\n");
+            add_to_cache = 0;
             break;
+        } else {
+            if (bytes_read == 0) {
+                break;
+            } else {
+                /* If the object read is too big, do not cache */
+                if (total_bytes_read >= MAX_OBJECT_SIZE) {
+                    add_to_cache = 0;
+                } else {
+                    /* Store the object */
+                    memcpy((resp_buf + total_bytes_read), buf, bytes_read);
+                }
+                /* Write the response to the client */
+                Rio_writen(clientfd, buf, bytes_read);
+                total_bytes_read += bytes_read;
+            }
         }
-
-        count++;
     }
 
-    /* @TODO - Error handling */
-    if (count >= MAX_HEADERS) {
-        fprintf(stderr, "forward_response: Proxy received over the max number of headers from the server.\n");
-    }
+    /* Check if object should be added to the cache */
+    if (add_to_cache) {
+        /* Create the cache entry */
+        void *cache_buf = Malloc(total_bytes_read);
+        memset(cache_buf, 0, total_bytes_read);
+        memcpy(cache_buf, resp_buf, total_bytes_read);
+        printf("%s\n", cache_buf);
+    } 
 
-    /* Convert char array to size_t */
-    sscanf(resp_len, "%zu", &resp_body_len);
-
-    /* @TODO */
-    /* Buffer for the cache. If the size of the buffer exceeds the maximum */
-    /* object size, discard the buffer.                                    */ 
-    void *cache_buf = Malloc(MAX_OBJECT_SIZE);
-    memset(cache_buf, 0, MAX_OBJECT_SIZE);
-
-    /* Free buffer */
-    free(cache_buf);
 }
 
 //////////
