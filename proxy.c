@@ -4,8 +4,6 @@
 // #include "proxycache.h"
 
 // @TODO
-// - Threads
-// - Error handling
 // - Cache
 
 #define MAX_CACHE_SIZE 1049000   /* Recommended max cache byte size  */
@@ -16,12 +14,12 @@
 //////////
 
 void proxy_communicate(int fd);
-int read_requesthdrs(rio_t *rp, char headers[MAX_HEADERS * sizeof(char *)][MAXLINE * sizeof(char)]);
-void build_http_request(char *req, char *method, char *uri, char *host, char *port, char *path, char *proto);
+int forward_response(int clientfd, int serverfd, char *buf);
 int forward_request(char *req, char *host, char *port, char *buf);
-void forward_response(int clientfd, int serverfd, char *buf);
-void parse_destination(char *dest, char *proto, char *host, char *port, char *path);
+int parse_destination(char *dest, char *proto, char *host, char *port, char *path);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
+int read_requesthdrs(rio_t *rp, char headers[MAX_HEADERS * sizeof(char *)][MAXLINE * sizeof(char)]);
+int build_http_request(char *req, char *method, char *uri, char *host, char *port, char *path, char *proto);
 
 //////////
 
@@ -71,14 +69,24 @@ int main(int argc, char **argv) {
 
         printf("main: Accepted connection from (%s, %s)\n", hostname, port);
         
-        /* @TODO: Add threads here */
+        /* Create the child process */
+        if (!Fork()) {
+            /* Child does not need the main socket connection */
+            Close(listenfd);
 
-        /* Handle an HTTP request and response */
-        proxy_communicate(connfd);
-        
+            /* Handle an HTTP request and response */
+            proxy_communicate(connfd);
+
+            /* Close the client connection */
+            Close(connfd);
+
+            exit(0);
+        }
+
         /* Close the socket */
-        // Close(connfd);
+        Close(connfd);
     }
+
 }
 
 //////////
@@ -91,6 +99,7 @@ int main(int argc, char **argv) {
 void proxy_communicate(int client_fd) {
     printf("\n*********ACCEPTING CONNECTION*********\n\n");
 
+    int err = 0;                /* T/F for error catching */
     int serverfd;               /* Server socket file descriptor */
     rio_t client_rio;           /* Robust wrapper for client IO  */
     char req_dest[MAXLINE];     /* Request destination */
@@ -121,13 +130,10 @@ void proxy_communicate(int client_fd) {
     /* Associate client socket connection file descriptor with buffer */
     Rio_readinitb(&client_rio, client_fd);
 
-    /* Read first line of request. Return gracefully on error */
+    /* Read the first line of the request. Return gracefully on error */
     if (!Rio_readlineb(&client_rio, req_header, MAXLINE)) {
-
-        /* @TODO: Add clienterror */
-        /* @TODO: Kill thread */
-        /* @TODO: Close connection */
-
+        fprintf(stderr, "Proxy could not read first line of the request.\n");
+        clienterror(client_fd, "Request headers", "400", "Bad Request", "Proxy cannot process this request");
         return;
     }
 
@@ -136,24 +142,15 @@ void proxy_communicate(int client_fd) {
 
     /* Only accept GET requests */
     if (strcasecmp(req_method, "GET")) {
-        fprintf(stderr, "proxy_communicate: Proxy only recognizes GET requests.\n");
+        fprintf(stderr, "Proxy only recognizes GET requests.\n");
         clienterror(client_fd, req_method, "501", "Not Implemented", "Proxy does not implement this method");
-
-        /* @TODO: Kill thread */
-        /* @TODO: Close connection */
-
         return;
     }
 
     /* Read headers */
     int num_headers = read_requesthdrs(&client_rio, req_header_arr);
     if (num_headers == -1) {
-        fprintf(stderr, "proxy_communicate: Proxy error reading headers from the client.\n");
-
-        /* @TODO: Add clienterror */
-        /* @TODO: Kill thread */
-        /* @TODO: Close connection */
-
+        clienterror(client_fd, "Request headers", "400", "Bad Request", "Proxy cannot process this request");
         return;
     }
 
@@ -165,17 +162,25 @@ void proxy_communicate(int client_fd) {
     }
 
     /* Build the HTTP request */
-    build_http_request(req_buf, req_method, req_dest, server_host, server_port, server_path, server_proto);
-
-    /* @TODO: Check cache */
+    err = build_http_request(req_buf, req_method, req_dest, server_host, server_port, server_path, server_proto);
+    if (err) {
+        clienterror(client_fd, "Request", "500", "Internal Server Error", "Proxy cannot process this request");
+        return;  
+    }
 
     /* Send request */
     serverfd = forward_request(req_buf, server_host, server_port, resp_buf);
+    if (serverfd == -1) {
+        clienterror(client_fd, "Server connection", "500", "Internal Server Error", "Proxy cannot connect to the server");
+        return;  
+    }
 
-    /* @TODO: Add url / objects to cache */
-    
     /* Send the response */
-    forward_response(client_fd, serverfd, resp_buf);
+    err = forward_response(client_fd, serverfd, resp_buf);
+    if (err) {
+        clienterror(client_fd, "Server connection", "500", "Internal Server Error", "Proxy cannot read server response");
+        return;  
+    }
 
 }
 
@@ -192,11 +197,7 @@ int forward_request(char *req, char *host, char *port, char *buf) {
     /* Open a connection to the server */
     if ((serverfd = open_clientfd(host, port)) == -1){
         perror("open_clientfd");
-
-        /* @TODO: Add clienterror */
-        /* @TODO: Kill thread */
-        /* @TODO: Close connection */
-
+        return -1;
     }
 
     /* Write request to the server */
@@ -210,7 +211,7 @@ int forward_request(char *req, char *host, char *port, char *buf) {
 /*
  * Send a response to the client.
  */
-void forward_response(int clientfd, int serverfd, char *res) {
+int forward_response(int clientfd, int serverfd, char *res) {
     printf("\n*********FORWARDING RESPONSE*********\n\n");
 
     rio_t server_rio;               /* Robust wrapper for server IO                    */
@@ -232,9 +233,8 @@ void forward_response(int clientfd, int serverfd, char *res) {
     /* Read in response */
     while (1) {
         if ((bytes_read = Rio_readn(serverfd, buf, BODY_SIZE)) == -1) {
-            fprintf(stderr, "forward_response: Error reading server response\n");
-            add_to_cache = 0;
-            break;
+            fprintf(stderr, "Error reading server response\n");
+            return -1;
         } else {
             if (bytes_read == 0) {
                 break;
@@ -259,8 +259,9 @@ void forward_response(int clientfd, int serverfd, char *res) {
         void *cache_buf = Malloc(total_bytes_read);
         memset(cache_buf, 0, total_bytes_read);
         memcpy(cache_buf, resp_buf, total_bytes_read);
-        printf("%s\n", cache_buf);
     } 
+
+    return 0;
 
 }
 
@@ -272,7 +273,7 @@ void forward_response(int clientfd, int serverfd, char *res) {
 int read_requesthdrs(rio_t *rp, char headers[MAX_HEADERS * sizeof(char *)][MAXLINE * sizeof(char)]) {
     int count = 0;
 
-    /* Read header line */
+    /* Read first header line */
     Rio_readlineb(rp, headers[count], MAXLINE);
 
     while(strcmp(headers[count], "\r\n") && count < MAX_HEADERS) {
@@ -282,11 +283,7 @@ int read_requesthdrs(rio_t *rp, char headers[MAX_HEADERS * sizeof(char *)][MAXLI
     }
     
     if (count >= MAX_HEADERS) {
-
-        /* @TODO: Add clienterror */
-        /* @TODO: Kill thread */
-        /* @TODO: Close connection */
-
+        fprintf(stderr, "Number of headers in client request exceeded limit of %d\n", MAX_HEADERS);
         return -1;
     }
 
@@ -298,11 +295,17 @@ int read_requesthdrs(rio_t *rp, char headers[MAX_HEADERS * sizeof(char *)][MAXLI
 /*
  *  Generate a new request to send to the server.
  */
-void build_http_request(char *req, char *method, char *dest, char *host, char *port, char *path, char *proto) {
-
-    parse_destination(dest, proto, host, port, path);
-    
+int build_http_request(char *req, char *method, char *dest, char *host, char *port, char *path, char *proto) {
     printf("\n*********BUILDING HTTP REQUEST*********\n\n");
+
+    /* T/F for error handling */
+    int error = 0;
+
+    error = parse_destination(dest, proto, host, port, path);
+
+    if (error) {
+        return error;
+    }
 
     printf("build_http_request: method: %s\n", method);
     printf("build_http_request: dest: %s\n", dest);
@@ -320,6 +323,8 @@ void build_http_request(char *req, char *method, char *dest, char *host, char *p
     
     printf("build_http_request: request is:\n%s", req);
 
+    return error;
+
 }
 
 //////////
@@ -328,7 +333,7 @@ void build_http_request(char *req, char *method, char *dest, char *host, char *p
  * Given an input destination string, parse out all the relevant 
  * details - the protocol, host, port, and path.
  */
-void parse_destination(char *dest, char *proto, char *host, char *port, char *path) {
+int parse_destination(char *dest, char *proto, char *host, char *port, char *path) {
     printf("\n*********PARSING DESTINATION*********\n\n");
     
     char *get_proto;         /* Get protocol of client request  */
@@ -357,6 +362,7 @@ void parse_destination(char *dest, char *proto, char *host, char *port, char *pa
         }
         if (strcmp(proto, "http") != 0 ) {
             fprintf(stderr, "Proxy only accepts HTTP requests. Protocol given: %s\n", proto);
+            return -1;
         }
 
         /* Skip "protocol://" */
@@ -402,6 +408,7 @@ void parse_destination(char *dest, char *proto, char *host, char *port, char *pa
         client_port = strtol(port, &client_port_ptr, 10);
         if (client_port == 0) {
             fprintf(stderr, "Server port must be an integer.\n");
+            return -1;
         }
 
         /* Skip port */
@@ -415,6 +422,8 @@ void parse_destination(char *dest, char *proto, char *host, char *port, char *pa
     printf("parse_destination: proto: %s\n", proto);
     printf("parse_destination: host: %s\n", host);
     printf("parse_destination: port: %s\n", port);
+
+    return 0;
 
 }
 
