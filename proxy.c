@@ -2,18 +2,26 @@
 #include <string.h>
 #include "csapp.h"
 
-void doit(int);
-int read_requesthdrs(rio_t *rp, char *heads[], int size);
-char* build_http_request(char *method, char *uri, char **heads, char *host, char *port);
-int make_request(char *req, char *host, char *port, char *buf);
-void send_response(int fd, char*buf);
-int parse_destination(char *dest, char *proto, char *host, char *port, char *uri);
-int parse_uri(char *uri, char *filename, char *cgiargs);
-void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
+// @TODO
+// - Threads
+// - Error handling
+// - Cache
 
 #define MAX_HEADERS 20          /* Max number of headers supported */
 #define MAX_CACHE_SIZE 1049000  /* Recommended max cache size      */
 #define MAX_OBJECT_SIZE 102400  /* Recommended max object size     */
+
+//////////
+
+void proxy_communicate(int fd);
+int read_requesthdrs(rio_t *rp, char headers[MAX_HEADERS * sizeof(char *)][MAXLINE * sizeof(char)]);
+void build_http_request(char *req, char *method, char *uri, char *host, char *port, char *path, char *proto);
+int forward_request(char *req, char *host, char *port, char *buf);
+void forward_response(int clientfd, int serverfd, char *buf);
+void parse_destination(char *dest, char *proto, char *host, char *port, char *path);
+void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
+
+//////////
 
 /* You won't lose style points for including this long line in your code */
 static const char *user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3";
@@ -52,7 +60,7 @@ int main(int argc, char **argv) {
         /* @TODO: Add threads here */
 
         /* Handle an HTTP request and response */
-        doit(connfd);
+        proxy_communicate(connfd);
         
         /* Close the socket */
         Close(connfd);
@@ -66,29 +74,40 @@ int main(int argc, char **argv) {
  * This is the main driver of a single lifecycle.
  * Adopted from tiny.c.
  */
-void doit(int fd) {
+void proxy_communicate(int client_fd) {
     printf("\n*********ACCEPTING CONNECTION*********\n\n");
 
-    char buf[MAXLINE], method[MAXLINE], destination[MAXLINE], version[MAXLINE];
-    rio_t rio;
+    int serverfd;               /* Server socket file descriptor */
+    rio_t client_rio;           /* Robust wrapper for client IO  */
+    char req_dest[MAXLINE];     /* Request destination */
+    char req_method[MAXLINE];   /* Request method      */
+    char req_version[MAXLINE];  /* Request version     */
+    char req_header[MAXLINE];   /* First line of incoming request: method, destination, version */
+    char server_host[MAXLINE];  /* Server hostname          */
+    char server_path[MAXLINE];  /* Server path (query)      */
+    char server_proto[MAXLINE]; /* Server protocol          */
+    char server_port[5];        /* Server port (1024-65536) */
+    char resp_buf[MAXLINE];     /* Formatted HTTP Request buffer  */
+    char req_buf[MAXLINE];      /* Formatted HTTP Response buffer */
+    
+    /* Request headers */
+    char req_header_arr[MAX_HEADERS * sizeof(char *)][MAXLINE * sizeof(char)];
 
-    /* Malloc space to hold headers */
-    char **heads = Malloc(MAX_HEADERS * sizeof(char *));
+    /* Associate client socket connection file descriptor with buffer */
+    Rio_readinitb(&client_rio, client_fd);
 
-    /* Associate socket connection file descriptor with buffer */
-    Rio_readinitb(&rio, fd);
-
-    /* Read request. Return gracefully on error */
-    if (!Rio_readlineb(&rio, buf, MAXLINE))
+    /* Read first line of request. Return gracefully on error */
+    if (!Rio_readlineb(&client_rio, req_header, MAXLINE)) {
         return;
+    }
 
     /* Ex: GET, http://localhost:41183/home.html, HTTP/1.1 */
-    sscanf(buf, "%s %s %s", method, destination, version);
+    sscanf(req_header, "%s %s %s", req_method, req_dest, req_version);
 
     /* Only accept GET requests */
-    if (strcasecmp(method, "GET")) {
-        fprintf(stderr, "doit: Proxy only recognizes GET requests.\n");
-        clienterror(fd, method, "501", "Not Implemented", "Proxy does not implement this method");
+    if (strcasecmp(req_method, "GET")) {
+        fprintf(stderr, "proxy_communicate: Proxy only recognizes GET requests.\n");
+        clienterror(client_fd, req_method, "501", "Not Implemented", "Proxy does not implement this method");
 
         /* @TODO: Kill thread */
         /* @TODO: Close connection */
@@ -97,9 +116,9 @@ void doit(int fd) {
     }
 
     /* Read headers */
-    int num_headers = read_requesthdrs(&rio, heads, MAX_HEADERS);
+    int num_headers = read_requesthdrs(&client_rio, req_header_arr);
     if (num_headers == -1) {
-        fprintf(stderr, "doit: Proxy received over the max number of headers from the client.\n");
+        fprintf(stderr, "proxy_communicate: Proxy received over the max number of headers from the client.\n");
 
         /* @TODO: Kill thread */
         /* @TODO: Close connection */
@@ -107,30 +126,25 @@ void doit(int fd) {
         return;
     }
 
-    printf("doit: method: %s\n", method);
-    printf("doit: destination: %s\n", destination);
-    printf("doit: version: %s\n", version);
+    printf("proxy_communicate: method: %s\n", req_method);
+    printf("proxy_communicate: destination: %s\n", req_dest);
+    printf("proxy_communicate: version: %s\n", req_version);
     for (int i = 0; i < num_headers; i++){
-        printf("doit: header: %s", heads[i]);
+        printf("proxy_communicate: header: %s", req_header_arr[i]);
     }
 
-    /* @TODO: Add URI to cache */
-
-    char *host = Malloc(MAXLINE);
-    /* Accept ports between 1,024 and 65,536 */
-    char *port = Malloc(3);
-    char req_buf[MAXLINE];
-
     /* Build the HTTP request */
-    char *http_request = build_http_request(method, destination, heads, host, port);
+    build_http_request(req_buf, req_method, req_dest, server_host, server_port, server_path, server_proto);
+
+    /* @TODO: Check cache */
+
+    /* Send request */
+    serverfd = forward_request(req_buf, server_host, server_port, resp_buf);
+
+    /* @TODO: Add url / objects to cache */
     
-    /* Make the request */
-    make_request(http_request, host, port, req_buf);
-    
-    /* Send the request */
-    send_response(fd, req_buf);
-    
-    /* @TODO: Free memory */
+    /* Send the response */
+    forward_response(client_fd, serverfd, resp_buf);
 
 }
 
@@ -139,14 +153,10 @@ void doit(int fd) {
 /*
  * Make the HTTP request.
  */
-int make_request(char *req, char *host, char *port, char *buf) {
-    int serverfd;
-    rio_t rio;
+int forward_request(char *req, char *host, char *port, char *buf) {
+    printf("\n*********FORWARDING REQUEST*********\n\n");
 
-    printf("\n*********MAKING REQUEST*********\n\n");
-    
-    printf("make_request: host: %s, port: %s\n", host, port);
-    printf("make_request: req: %s\n", req);
+    int serverfd;   /* Server socket file descriptor */
 
     /* Open a connection to the server */
     if ((serverfd = open_clientfd(host, port)) == -1){
@@ -156,21 +166,6 @@ int make_request(char *req, char *host, char *port, char *buf) {
     /* Write request to the server */
     Rio_writen(serverfd, req, strlen(req));
     
-    printf("make_request: wrote request to server\n");
-
-    /* Read server response */
-    int readAllData = 0;
-    Rio_readinitb(&rio, serverfd);
-    while(!readAllData) {
-        if (!Rio_readlineb(&rio, buf, MAXLINE)) {
-            printf("here error returning");
-            return -1;
-        }
-        printf("Hello bellow:\n%s", buf);
-        if (strcmp(buf, "\r\n\r\n")) {
-            readAllData = 1;
-        }
-    }
     return serverfd;
 }
 
@@ -179,11 +174,67 @@ int make_request(char *req, char *host, char *port, char *buf) {
 /*
  * Send a response to the client.
  */
-void send_response(int clientfd, char *res) {
-    printf("\n*********SENDING RESPONSE*********\n\n");
-    printf("send_response: res: %s\n", res);
-    Rio_writen(clientfd, res, strlen(res));
-    printf("send_response: wrote response\n");
+void forward_response(int clientfd, int serverfd, char *res) {
+    printf("\n*********FORWARDING RESPONSE*********\n\n");
+
+    rio_t server_rio;         /* Robust wrapper for server IO */
+    char header_buf[MAXLINE]; /* Buffer for response headers  */
+    char resp_len[MAXLINE];   /* Response Content-Length buf  */
+    char *get_resp_status;    /* Response Status              */
+    char *get_resp_len;       /* Response Content-Length      */
+    char *get_resp_end;       /* Response Content-Length end  */
+    size_t resp_body_len;     /* Number of bytes in response body */
+
+    /* Associate client socket connection file descriptor with buffer */
+    Rio_readinitb(&server_rio, serverfd);
+
+    /* Read "Status" header  */
+    Rio_readlineb(&server_rio, header_buf, MAXLINE);
+
+    /* Check "Status" */
+    get_resp_status = strstr(header_buf, "200");
+
+    /* @TODO - Error checking */
+    if (get_resp_status == NULL) {
+        printf("forward_response: Server response not equal to 200: %s\n", header_buf);       
+    }
+
+    /* Read remaining headers to get "Content-Length" */
+    int count = 0;
+    while(strcmp(header_buf, "\r\n") && count < MAX_HEADERS) { 
+        Rio_readlineb(&server_rio, header_buf, MAXLINE);
+
+        /* Get the the Content-Length if it exists */
+        get_resp_len = strstr(header_buf, "Content-Length");
+
+        if (get_resp_len != NULL) {
+            get_resp_len = (strstr(header_buf, ":") + 2);
+            get_resp_end = strstr(header_buf, "\r\n");
+            size_t diff1 = (get_resp_len - header_buf);
+            size_t diff2 = (get_resp_end - get_resp_len);
+            memcpy(resp_len, (header_buf + diff1), diff2);
+            break;
+        }
+
+        count++;
+    }
+
+    /* @TODO - Error handling */
+    if (count >= MAX_HEADERS) {
+        fprintf(stderr, "forward_response: Proxy received over the max number of headers from the server.\n");
+    }
+
+    /* Convert char array to size_t */
+    sscanf(resp_len, "%zu", &resp_body_len);
+
+    /* @TODO */
+    /* Buffer for the cache. If the size of the buffer exceeds the maximum */
+    /* object size, the buffer is discared.                                */ 
+    void *cache_buf = Malloc(MAX_OBJECT_SIZE);
+    memset(cache_buf, 0, MAX_OBJECT_SIZE);
+
+    /* Free buffer */
+    free(cache_buf);
 }
 
 //////////
@@ -191,21 +242,19 @@ void send_response(int clientfd, char *res) {
 /*
  * Read HTTP request headers.
  */
-int read_requesthdrs(rio_t *rp, char **hs, int size) {
+int read_requesthdrs(rio_t *rp, char headers[MAX_HEADERS * sizeof(char *)][MAXLINE * sizeof(char)]) {
     int count = 0;
 
-    /* Malloc and read a header line */
-    hs[count] = Malloc(MAXLINE * sizeof(char));
-    Rio_readlineb(rp, hs[count], MAXLINE);
+    /* Read header line */
+    Rio_readlineb(rp, headers[count], MAXLINE);
 
-    while(strcmp(hs[count], "\r\n") && count < size) {
+    while(strcmp(headers[count], "\r\n") && count < MAX_HEADERS) {
         count++;
-        /* Malloc and read each header line */
-        hs[count] = Malloc(MAXLINE * sizeof(char));
-        Rio_readlineb(rp, hs[count], MAXLINE);
+        /* Read each header line */
+        Rio_readlineb(rp, headers[count], MAXLINE);
     }
     
-    if (count >= size) {
+    if (count >= MAX_HEADERS) {
         return -1;
     }
 
@@ -217,53 +266,21 @@ int read_requesthdrs(rio_t *rp, char **hs, int size) {
 /*
  *  Generate a new request to send to the server.
  */
-char* build_http_request(char *method, char *dest, char **heads, char *host, char *port) {
-    /* @TODO - Need Malloc? */
-    char *protocol = Malloc(10);
-    char *uri = Malloc(MAXLINE);
-    char *req = Malloc(MAXLINE);
+void build_http_request(char *req, char *method, char *dest, char *host, char *port, char *path, char *proto) {
 
-    int have_host = parse_destination(dest, protocol, host, port, uri);
+    parse_destination(dest, proto, host, port, path);
     
     printf("\n*********BUILDING HTTP REQUEST*********\n\n");
 
-    /* Destination did not have a protocol - assume hostname was given */
-    if (have_host > 0) {
-        printf("build_http_request: destination did not have a protocol\n");
-    } else {
-        char *host_header = heads[0] + 6;
-        printf("%s\n", host_header);
-        printf("%s\n", uri);
-        char *maybe_port = malloc(6);
-        maybe_port = strstr(host_header, ":");
-
-        if (maybe_port == NULL) {
-            memcpy(host, host_header, strlen(host_header));
-            /* If port is empty, set it to default of 80 */
-            strcpy(port, "80");
-        } else {
-            printf("%s\n", maybe_port);
-            int diff = (int) (maybe_port - host_header);
-            memcpy(host, host_header, diff);
-            maybe_port += 1;
-            memcpy(port, maybe_port, strlen(maybe_port));
-        }
-
-        printf("Host: %s; Port: %s\n", host, port);
-
-        /* Default to HTTP protocol if none is given */
-        memcpy(protocol, "http", strlen("http"));
-    }
-
     printf("build_http_request: method: %s\n", method);
     printf("build_http_request: dest: %s\n", dest);
-    printf("build_http_request: protocol: %s\n", protocol);
+    printf("build_http_request: path: %s\n", path);
+    printf("build_http_request: protocol: %s\n", proto);
     printf("build_http_request: host: %s\n", host);
     printf("build_http_request: port: %s\n", port);
-    printf("build_http_request: uri: %s\n", uri);
 
     /* Format the request */
-    sprintf(req, "%s %s HTTP/1.0\r\n", method, uri);
+    sprintf(req, "%s %s HTTP/1.0\r\n", method, path);
     sprintf(req, "%sHost: %s\r\n", req, host);
     sprintf(req, "%sUser-Agent: %s\r\n", req, user_agent);
     sprintf(req, "%sConnection: close\r\n", req);
@@ -271,77 +288,84 @@ char* build_http_request(char *method, char *dest, char **heads, char *host, cha
     
     printf("build_http_request: request is:\n%s", req);
 
-    /* @TODO - Free */
-
-    return req;
 }
 
 //////////
 
 /*
  * Given an input destination string, parse out all the relevant 
- * details - the protocol, host, port, and uri.
- * Returns 0 if dest is just the uri; 1 otherwise.
+ * details - the protocol, host, port, and path.
  */
-int parse_destination(char *dest, char *proto, char *host, char *port, char *uri) {
+void parse_destination(char *dest, char *proto, char *host, char *port, char *path) {
     printf("\n*********PARSING DESTINATION*********\n\n");
+    
+    char *get_proto;         /* Get protocol of client request  */
+    char *get_port;          /* Get port the client requested   */
+    char *get_path;          /* Get the path (query) the client requested */
 
-    /* @TODO - Need Malloc? */
-    char *no_proto;
-    char *no_host = Malloc(MAXLINE);
-    char *unclean_host = Malloc(MAXLINE);
-    char *maybe_port = Malloc(3);
-    int diff = 0;
+    size_t diff = 0;
 
-    /* Get the string beginning with the matched substring */
-    no_proto = strstr(dest, "://");
-    if (no_proto == NULL) {
-        memcpy(uri, dest, strlen(dest));
-        return 0;
+    /* Get the the protocol if it exists */
+    get_proto = strstr(dest, "://");
+    if (get_proto == NULL) {
+        /* Default to HTTP */
+        strcpy(proto, "http");
+    } else {
+        /* Get the number of characters for protocol */
+        diff = (get_proto - dest);
+
+        /* Copy protocol */
+        memcpy(proto, dest, diff);
+
+        /* Skip "protocol://" */
+        dest += (diff + 3);
     }
-    
-    /* Get the amount of characters from beginning of dest through no_proto */
-    diff = (int) (no_proto - dest);
 
-    /* Copy diff number of characters from dest into proto */
-    memcpy(proto, dest, diff);
+    /* Get the path */
+    get_path = strstr(dest, "/");
 
-    /* Move forward three characters in the no_proto -  */
-    /* this is needed in order to get rid of "://"      */
-    no_proto += 3;
-    
-    /* no_host holds everything past the host & port == just the uri */
-    no_host = strstr(no_proto, "/");
-    
-    /* Get the amount of chars from beginning of no_proto through no_host */
-    diff = (int) (no_host - no_proto);
+    /* Get the number of characters for hostname:port */
+    diff = (get_path - dest);
 
-    memcpy(unclean_host, no_proto, diff);
+    /* Get the port if it exists */
+    get_port = strstr(dest, ":");
+    if (get_port == NULL) {
+        memcpy(host, dest, diff);
+        
+        /* Skip hostname */
+        dest += diff;
 
-    maybe_port = strstr(unclean_host, ":");
-
-    if (maybe_port == NULL) {
-        memcpy(host, unclean_host, strlen(unclean_host));
         /* Default to port 80 */
         strcpy(port, "80");
     } else {
-        diff = (int) (maybe_port - unclean_host);
-        memcpy(host, unclean_host, diff);
-        maybe_port += 1;
-        memcpy(port, maybe_port, strlen(maybe_port));
+        diff = (get_port - dest);
+        
+        /* Copy the hostname */
+        memcpy(host, dest, diff);
+        
+        /* Skip hostname: */
+        dest += (diff + 1);
+
+        /* Skip ":" */
+        get_port += 1;
+        
+        diff = (get_path - get_port);
+
+        /* Copy the port */
+        memcpy(port, dest, diff);
+
+        /* Skip port */
+        dest += diff;
     }
 
-    printf("parse_destination: dest: %s\n", dest);
+    /* Copy the path */
+    memcpy(path, dest, strlen(dest));
+
+    printf("parse_destination: path: %s\n", path);
     printf("parse_destination: proto: %s\n", proto);
     printf("parse_destination: host: %s\n", host);
     printf("parse_destination: port: %s\n", port);
-    printf("parse_destination: uri: %s\n", uri);
 
-    memcpy(uri, no_host, strlen(no_host));
-
-    /* @TODO - Free */
-
-    return 1;
 }
 
 //////////
