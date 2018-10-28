@@ -27,6 +27,8 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
 static const char *user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3";
 
 int main(int argc, char **argv) {
+    int proxy_port;                      /* Port number from command line */
+    char *proxy_port_ptr;                /* Port number from command line */
     int listenfd;                        /* File descriptor for listening socket */
     int connfd;                          /* File descriptor for client socket    */
     char port[MAXLINE];                  /* Client port     */
@@ -37,6 +39,13 @@ int main(int argc, char **argv) {
     /* Check command line args */
     if (argc != 2) {
         fprintf(stderr, "usage: %s <port>\n", argv[0]);
+        exit(1);
+    }
+
+    /* Validate the port number */
+    proxy_port = strtol(argv[1], &proxy_port_ptr, 10);
+    if (proxy_port <= 1024 || proxy_port >= 65536) {
+        fprintf(stderr, "Proxy port must be greater than 1024 and less than 65536. Port given: %d\n", proxy_port);
         exit(1);
     }
 
@@ -98,6 +107,11 @@ void proxy_communicate(int client_fd) {
 
     /* Read first line of request. Return gracefully on error */
     if (!Rio_readlineb(&client_rio, req_header, MAXLINE)) {
+
+        /* @TODO: Add clienterror */
+        /* @TODO: Kill thread */
+        /* @TODO: Close connection */
+
         return;
     }
 
@@ -118,8 +132,9 @@ void proxy_communicate(int client_fd) {
     /* Read headers */
     int num_headers = read_requesthdrs(&client_rio, req_header_arr);
     if (num_headers == -1) {
-        fprintf(stderr, "proxy_communicate: Proxy received over the max number of headers from the client.\n");
+        fprintf(stderr, "proxy_communicate: Proxy error reading headers from the client.\n");
 
+        /* @TODO: Add clienterror */
         /* @TODO: Kill thread */
         /* @TODO: Close connection */
 
@@ -161,6 +176,11 @@ int forward_request(char *req, char *host, char *port, char *buf) {
     /* Open a connection to the server */
     if ((serverfd = open_clientfd(host, port)) == -1){
         perror("open_clientfd");
+
+        /* @TODO: Add clienterror */
+        /* @TODO: Kill thread */
+        /* @TODO: Close connection */
+
     }
 
     /* Write request to the server */
@@ -188,7 +208,7 @@ void forward_response(int clientfd, int serverfd, char *res) {
     /* Associate client socket connection file descriptor with buffer */
     Rio_readinitb(&server_rio, serverfd);
 
-    /* Read "Status" header  */
+    /* Read "Status" header */
     Rio_readlineb(&server_rio, header_buf, MAXLINE);
 
     /* Check "Status" */
@@ -208,10 +228,13 @@ void forward_response(int clientfd, int serverfd, char *res) {
         get_resp_len = strstr(header_buf, "Content-Length");
 
         if (get_resp_len != NULL) {
+            /* Get starting position of "Content-Length" value */
             get_resp_len = (strstr(header_buf, ":") + 2);
             get_resp_end = strstr(header_buf, "\r\n");
             size_t diff1 = (get_resp_len - header_buf);
             size_t diff2 = (get_resp_end - get_resp_len);
+
+            /* Get the "Content-Length" value */
             memcpy(resp_len, (header_buf + diff1), diff2);
             break;
         }
@@ -229,7 +252,7 @@ void forward_response(int clientfd, int serverfd, char *res) {
 
     /* @TODO */
     /* Buffer for the cache. If the size of the buffer exceeds the maximum */
-    /* object size, the buffer is discared.                                */ 
+    /* object size, discard the buffer.                                    */ 
     void *cache_buf = Malloc(MAX_OBJECT_SIZE);
     memset(cache_buf, 0, MAX_OBJECT_SIZE);
 
@@ -255,6 +278,11 @@ int read_requesthdrs(rio_t *rp, char headers[MAX_HEADERS * sizeof(char *)][MAXLI
     }
     
     if (count >= MAX_HEADERS) {
+
+        /* @TODO: Add clienterror */
+        /* @TODO: Kill thread */
+        /* @TODO: Close connection */
+
         return -1;
     }
 
@@ -280,7 +308,7 @@ void build_http_request(char *req, char *method, char *dest, char *host, char *p
     printf("build_http_request: port: %s\n", port);
 
     /* Format the request */
-    sprintf(req, "%s %s HTTP/1.0\r\n", method, path);
+    sprintf(req, "%s %s %s/1.0\r\n", method, path, proto);
     sprintf(req, "%sHost: %s\r\n", req, host);
     sprintf(req, "%sUser-Agent: %s\r\n", req, user_agent);
     sprintf(req, "%sConnection: close\r\n", req);
@@ -305,17 +333,27 @@ void parse_destination(char *dest, char *proto, char *host, char *port, char *pa
 
     size_t diff = 0;
 
-    /* Get the the protocol if it exists */
+    /* Get the protocol if it exists */
     get_proto = strstr(dest, "://");
     if (get_proto == NULL) {
         /* Default to HTTP */
         strcpy(proto, "http");
     } else {
-        /* Get the number of characters for protocol */
+        /* Get the number of characters for the protocol */
         diff = (get_proto - dest);
 
         /* Copy protocol */
         memcpy(proto, dest, diff);
+
+        /* Confirm the protocal is HTTP */
+        int i = 0;
+        while(proto[i]) {
+            proto[i] = tolower(proto[i]);
+            i++;
+        }
+        if (strcmp(proto, "http") != 0 ) {
+            fprintf(stderr, "Proxy only accepts HTTP requests. Protocol given: %s\n", proto);
+        }
 
         /* Skip "protocol://" */
         dest += (diff + 3);
@@ -353,6 +391,14 @@ void parse_destination(char *dest, char *proto, char *host, char *port, char *pa
 
         /* Copy the port */
         memcpy(port, dest, diff);
+
+        /* Validate the port number */
+        int client_port;
+        char *client_port_ptr;
+        client_port = strtol(port, &client_port_ptr, 10);
+        if (client_port == 0) {
+            fprintf(stderr, "Server port must be an integer.\n");
+        }
 
         /* Skip port */
         dest += diff;
