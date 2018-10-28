@@ -38,6 +38,9 @@ int main(int argc, char **argv) {
     socklen_t clientlen;                 /* Client address info */
     struct sockaddr_storage clientaddr;  /* Client address info */
 
+    memset(port, 0, MAXLINE);
+    memset(hostname, 0, MAXLINE);
+
     /* Check command line args */
     if (argc != 2) {
         fprintf(stderr, "usage: %s <port>\n", argv[0]);
@@ -74,7 +77,7 @@ int main(int argc, char **argv) {
         proxy_communicate(connfd);
         
         /* Close the socket */
-        Close(connfd);
+        // Close(connfd);
     }
 }
 
@@ -101,6 +104,17 @@ void proxy_communicate(int client_fd) {
     char resp_buf[MAXLINE];     /* Formatted HTTP Request buffer  */
     char req_buf[MAXLINE];      /* Formatted HTTP Response buffer */
     
+    memset(req_dest, 0, MAXLINE);
+    memset(req_method, 0, MAXLINE);
+    memset(req_version, 0, MAXLINE);
+    memset(req_header, 0, MAXLINE);
+    memset(server_host, 0, MAXLINE);
+    memset(server_path, 0, MAXLINE);
+    memset(server_proto, 0, MAXLINE);
+    memset(server_port, 0, 5);
+    memset(resp_buf, 0, MAXLINE);
+    memset(req_buf, 0, MAXLINE);
+
     /* Request headers */
     char req_header_arr[MAX_HEADERS * sizeof(char *)][MAXLINE * sizeof(char)];
 
@@ -209,6 +223,7 @@ void forward_response(int clientfd, int serverfd, char *res) {
 
     /* Local buffer for reading each socket response */
     char buf[BODY_SIZE];
+    memset(buf, 0, BODY_SIZE);
 
     /* Local buffer of entire object */
     char resp_buf[MAX_OBJECT_SIZE];
@@ -411,6 +426,8 @@ void parse_destination(char *dest, char *proto, char *host, char *port, char *pa
  */
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg) {
     char buf[MAXLINE], body[MAXBUF];
+    memset(buf, 0, MAXLINE);
+    memset(body, 0, MAXBUF);
 
     /* Build the HTTP response body */
     sprintf(body, "<html><title>Proxy Error</title>");
