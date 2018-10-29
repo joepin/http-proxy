@@ -31,12 +31,12 @@ int comp_time(const void * a, const void * b) {
 
 //////////
 
+/* Create NULL Nodes for each cache entry */
 void constructCache() {
 	printf("\n*********CONSTRUCTING CACHE*********\n\n");
 
 	/* Fill the cache with empty nodes */
 	for (int i = 0; i < MAX_LRU_ELEMENTS; i++) {
-    	printf("Creating node %d for cache\n", i);
     	Node *new_node = Malloc(sizeof(Node));
 
     	new_node->time = 0;
@@ -51,11 +51,13 @@ void constructCache() {
 
 //////////
 
+/* Add an object to the cache */
 void addToCache(char *url, char *object, int object_size) {
     printf("\n*********ADDING OBJECT TO CACHE*********\n\n");
     
     printf("Adding object size: %d\n", object_size);
     printf("Current cache size: %d\n", cache_size);
+    printf("Current number of elements: %d\n", num_nodes);
     printf("Available memeory in cache: %d\n", (MAX_CACHE_SIZE - cache_size));
     printf("Is space available: %d\n", (num_nodes != MAX_LRU_ELEMENTS));
 
@@ -64,7 +66,9 @@ void addToCache(char *url, char *object, int object_size) {
     strcpy(cache[num_nodes]->url, url);
     cache[num_nodes]->buf_len = object_size;
 
+    /* Update counts */
     num_nodes++;
+    cache_size += object_size;
 
    	qsort(cache, MAX_LRU_ELEMENTS, sizeof(Node*), comp_time);
 
@@ -72,6 +76,7 @@ void addToCache(char *url, char *object, int object_size) {
 
 //////////
 
+/* Get an object from the cache */
 void getFromCache(char *url, char *object, int *object_size) {
     printf("\n*********GETTING OBJECT FROM CACHE*********\n\n");
 
@@ -79,9 +84,11 @@ void getFromCache(char *url, char *object, int *object_size) {
 	Node *node = NULL;
 
 	/* Search table for url */
-    for (int i = 0; i < num_nodes; i++) {
+    for (int i = 0; i < MAX_LRU_ELEMENTS; i++) {
+		printf("url: %s\n", cache[i]->url);
     	if (strcmp(cache[i]->url, url) != 0) {
 			node = cache[i];
+			break;
     	}
     }
 
