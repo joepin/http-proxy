@@ -60,13 +60,13 @@ void addToCache(char *url, char *object, int object_size) {
     printf("Is space available: %d\n", (num_nodes != MAX_LRU_ELEMENTS));
 
     cache[num_nodes]->buf = object;
-    cache[num_nodes]->time = time(0);
+    cache[num_nodes]->time = time(NULL);
     strcpy(cache[num_nodes]->url, url);
     cache[num_nodes]->buf_len = object_size;
 
     num_nodes++;
 
-   	// qsort(cache, MAX_LRU_ELEMENTS, sizeof(struct Node), comp_time);
+   	qsort(cache, MAX_LRU_ELEMENTS, sizeof(Node*), comp_time);
 
 }
 
@@ -75,11 +75,30 @@ void addToCache(char *url, char *object, int object_size) {
 void getFromCache(char *url, char *object, int *object_size) {
     printf("\n*********GETTING OBJECT FROM CACHE*********\n\n");
 
-    for (int i = 0; i < MAX_LRU_ELEMENTS; i++) {
-		printf("time: %lu\n", cache[i]->time);
-		printf("len: %d\n", cache[i]->buf_len);
-		printf("url: %s\n", cache[i]->url);
+    /* Value returned from the table */
+	Node *node = NULL;
+
+	/* Search table for url */
+    for (int i = 0; i < num_nodes; i++) {
+    	if (strcmp(cache[i]->url, url) != 0) {
+			node = cache[i];
+    	}
     }
+
+	/* Object is not in the cache */ 
+	if (node == NULL) {
+		printf("Node not found in cache.\n");
+		return;
+	}
+
+	/* Set object */
+	object = node->buf;
+
+	/* Update the time */
+	node->time = time(NULL);
+
+	/* Reorder the cache */
+   	qsort(cache, MAX_LRU_ELEMENTS, sizeof(Node*), comp_time);
 
 }
 
