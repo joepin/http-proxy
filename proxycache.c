@@ -1,47 +1,56 @@
 #include "proxycache.h"
-#include <string.h>
 
 /*
  * README
  * Implementation of a forward cache for a proxy server. Creates
- * two queues and one hash table for LRU and LFU functionality.
+ * two lists and one hash table for LRU and LFU functionality.
  */
 
 //////////
 
 typedef struct Node {
     char *buffer;                /* Buffer for web object                */
-    time_t time;                /* Time URL was added to cache           */
+    time_t time;                 /* Time node was last accessed          */
     int frequency;               /* Frequency count of URL               */
     struct Node *left;           /* Pointer to left node in linked list  */
     struct Node *right;          /* Pointer to right node in linked list */
 } Node;
 
-typedef struct Queue {
-    int size;                    /* Size of queue                        */
+typedef struct List {
+    int size;                    /* Size of list                         */
+    int capacity;				 /* Capacity of list 					 */
     Node *head;                  /* Pointer to head node                 */
     Node *tail;                  /* Pointer to tail node                 */
-} Queue;
+} List;
 
 //////////
 
 typedef struct Hash_Node {       /* Node for hash table                   */
     int frequency;               /* Frequency count of URL                */
+    time_t time;                 /* Time node was last accessed           */
     Node *LRU_element;           /* Pointer to node in LRU                */
     Node *LFU_element;           /* Pointer to node in LFU                */
 } Hash_Node;
 
 typedef struct Hash_Table {      /* Hash table                            */
     int size;                    /* Number of elements in the table       */
-    Hash_Node table[MAX_CACHE_ELEMENTS];  /* Array of Hash_Nodes          */
+    int min_freq;                /* Minimum frequency in LFU cache        */
+	int cache_size;				 /* Size of the cache in bytes            */
+    Hash_Node *table[MAX_CACHE_ELEMENTS];  /* Array of Hash_Nodes         */
 } Hash_Table;
 
 //////////
 
-static Queue LFU_cache;
-static Queue LRU_cache;
-static Hash_Table hash_table;
-static int cache_size = 0;
+static List LFU_cache;			 /* Least Frequently Used cache 		  */
+static List LRU_cache;			 /* Least Recently Used cache (queue)     */
+static Hash_Table hash_table;    /* Hash table 					 		  */
+
+//////////
+
+void constructCache() {
+	LFU_cache.capacity = MAX_LFU_ELEMENTS;
+	LRU_cache.capacity = MAX_LRU_ELEMENTS;
+}
 
 //////////
 
@@ -57,94 +66,180 @@ static int hash(char *url) {
 	return (int)(hash % MAX_CACHE_ELEMENTS);
 }
 
-static void removeFromCache(Queue cache, Node* node) {
-	printf("temp\n");
-}
+//////////
 
-static void enqueueCache(Queue cache, Node* node) {
-	printf("temp\n");
-}
+/* Remove a node from the linked list */
+static void removeFromCache(List cache, Node* node) {
+    printf("\n*********REMOVING OBJECT FROM CACHE*********\n\n");
 
-static void dequeueCache(Queue cache, Node* node) {
-	printf("temp\n");
 }
 
 //////////
 
+/* Insert a node into the linked list */
+static void insertIntoCache(List cache, Node* node) {
+    printf("\n*********INSERTING OBJECT INTO CACHE*********\n\n");
+
+}
+
+//////////
+
+/* Pop the last element of a queue */
+static void popCache(List cache) {
+    printf("\n*********POPPING OBJECT FROM CACHE*********\n\n");
+	removeFromCache(cache, cache.tail);
+}
+
+//////////
+
+/* Push a node onto the queue */
+static void pushIntoCache(List cache, Node* node) {
+    printf("\n*********PUSHING OBJECT INTO CACHE*********\n\n");
+
+    /* Make space in the cache */
+    if (cache.size == cache.capacity) {
+    	popCache(cache);
+    }
+
+    /* Add node to cache */
+	insertIntoCache(cache, node);
+}
+
+//////////
+
+/* Add an object to the hash table, and either the LRU or LFU caches.  */
+/* There should not be redundant entries between each cache, therefore */
+/* each object is only added to one cache. 							   */
 void addToCache(char *url, char *object, int object_size) {
     printf("\n*********ADDING OBJECT TO CACHE*********\n\n");
 
-	int key;			/* Key for the hash table 		  */
-	Hash_Node value;	/* Value returned from hash table */
-
 	/* Hash incoming URL */
-	key = hash(url);
+	int key = hash(url);
 
-	/* Get the value */
-	value = hash_table.table[key];
+    /* Check if there is room in the cache */
+    if ((hash_table.cache_size - MAX_CACHE_SIZE) < object_size) {
+    	fprintf(stderr, "Could not add cache entry due to lack of memory\n");
+    	return;
+    }
 
-	// if not in lfu, and freq > lfu.freq, add to lfu. check if size == capacity
+    /* Check if the object fits in the cache */
+    if (object_size >= MAX_OBJECT_SIZE) {
+    	fprintf(stderr, "Could not add cache entry due to the object size\n");
+    	return;
+    }
+
+    /* Instantiate a hash table entry */
+    Hash_Node *hash_node = Malloc(sizeof(struct Hash_Node));
+    hash_node->frequency = 1;
+    hash_node->time = time(NULL);
+    hash_node->LFU_element = NULL;
+    hash_node->LRU_element = NULL;
+
+	hash_table.table[key] = hash_node;
+	hash_table.cache_size += object_size;
+
+    /* Instantiate a node */
+    Node *node = Malloc(sizeof(struct Node));
+    node->buffer = object;
+    node->frequency = hash_node->frequency;
+    node->time = hash_node->time;
+    node->left = NULL;
+    node->right = NULL;
+
+    /* If there is room in LFU, add the node. */
+    /* If added to LFU, don't add to LRU.     */
+    if (LFU_cache.size < MAX_LFU_ELEMENTS) {
+    	hash_node->LFU_element = node;
+    	insertIntoCache(LFU_cache, node);
+    	return;
+    }
+
+    /* Add to LFU if the frequency is greater than */
+    /* the smallest frequency in the LFU cache.    */
+    /* If added to LFU, don't add to LRU.     	   */
+	if (LFU_cache.tail != NULL) {
+		if (node->frequency > LFU_cache.tail->frequency) {
+			hash_node->LFU_element = node;
+    		insertIntoCache(LFU_cache, node);
+			return;
+		}
+	}
+
+    /* Else, add to LRU */
+	hash_node->LRU_element = node;
+	pushIntoCache(LRU_cache, node);
 
 }
 
 //////////
 
-char* getFromCache(char *url) {
+/* Return an object from the cache. Update the object's frequency    */
+/* and access time within the cache. Reorder the cache linked lists. */
+void getFromCache(char *url, char *object, int *object_size) {
     printf("\n*********GETTING OBJECT FROM CACHE*********\n\n");
 
-    int in_LFU = 0;     /* T/F if object is in LFU cache  */
 	int key;  			/* Key for the hash table 		  */
-	Hash_Node value;	/* Value returned from hash table */
-	char *object;       /* Object stored in cache         */
+	Hash_Node *node;	/* Value returned from hash table */
 
 	/* Hash incoming URL */
 	key = hash(url);
 
 	/* Get the value */
-	value = hash_table.table[key];
+	node = hash_table.table[key];
 
-	/* Object is not in either cache */
-	if (value.frequency == 0) {
-		return NULL;
+	/* Check if object is in cache */
+	if (node == NULL || node->frequency == 0) {
+		return;
 	}
 
-	/* Frequency is not 0, the value is in one or both caches */
-	value.frequency++;
+	/* Frequency is not 0, the node is in one or both caches */
+	node->frequency++;
+	node->time = time(NULL);
 
-	/* Check if value is in LFU */
-	if (value.LFU_element != NULL) {
-		value.LFU_element->frequency++;
-
+	/* Check if node is in LFU */
+	if (node->LFU_element != NULL) {
 		/* Get object */
-		object = value.LFU_element->buffer;
-		in_LFU = 1;
+		object = node->LFU_element->buffer;
+
+		/* Update object's frequency and timestamp */
+		node->LFU_element->frequency = node->frequency; 
+		node->LFU_element->time      = node->time; 
 
 		/* Reorder the cache */
-		if (value.LFU_element != LFU_cache.head) {
-			removeFromCache(LFU_cache, value.LFU_element);
-			enqueueCache(LFU_cache, value.LFU_element);
+		if (node->LFU_element != LFU_cache.head) {
+			removeFromCache(LFU_cache, node->LFU_element);
+			insertIntoCache(LFU_cache, node->LFU_element);
 		}
+
+		return;
 
 	}
 
-	/* Check if value is in LRU */
-	if (value.LRU_element != NULL) {
-		value.LRU_element->time = time(NULL);
-
+	/* Check if node is in LRU */
+	if (node->LRU_element != NULL) {
 		/* Get object */
-		if (!in_LFU) {
-			object = value.LRU_element->buffer;
+		object = node->LRU_element->buffer;
+
+		/* Update object's frequency and timestamp */
+		node->LRU_element->frequency = node->frequency; 
+		node->LRU_element->time      = node->time; 
+
+		/* Check if node can go in LFU */
+		if (LFU_cache.tail != NULL) {
+			if (node->LRU_element->frequency > LFU_cache.tail->frequency) {
+				removeFromCache(LRU_cache, node->LRU_element);
+				pushIntoCache(LFU_cache, node->LRU_element);
+				return;
+			}
 		}
 
 		/* Reorder the cache */
-		if (value.LRU_element != LRU_cache.head) {
-			removeFromCache(LRU_cache, value.LRU_element);
-			enqueueCache(LRU_cache, value.LRU_element);
+		if (node->LRU_element != LRU_cache.head) {
+			removeFromCache(LRU_cache, node->LRU_element);
+			pushIntoCache(LRU_cache, node->LRU_element);
 		}
 
 	}
-
-	return object;
 
 }
 

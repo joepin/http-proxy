@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
-#include "csapp.h"
 #include "proxycache.h"
+#include "csapp.h"
 
 //////////
 
@@ -12,8 +12,9 @@
 //////////
 
 void *proxy_communicate(void *fd);
-int forward_response(int clientfd, int serverfd, char *buf, int *buf_size);
 int forward_request(char *req, char *host, char *port);
+void forward_cached_response(int clientfd, char *resp, int resp_size);
+int forward_response(int clientfd, int serverfd, char *buf, int *buf_size);
 int parse_destination(char *dest, char *proto, char *host, char *port, char *path);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 int read_requesthdrs(rio_t *rp, char headers[MAX_HEADERS * sizeof(char *)][MAXLINE * sizeof(char)]);
@@ -37,6 +38,9 @@ int main(int argc, char **argv) {
     memset(port, 0, MAXLINE);
     memset(hostname, 0, MAXLINE);
 
+    /* Ignore SIGPIPE */
+    Signal(SIGPIPE, SIG_IGN);
+
     /* Check command line args */
     if (argc != 2) {
         fprintf(stderr, "usage: %s <port>\n", argv[0]);
@@ -55,6 +59,9 @@ int main(int argc, char **argv) {
     if (listenfd == -1 || listenfd == -2){
         perror("Open_listenfd");
     }
+
+    /* Instantiate the cache */
+    constructCache();
 
     while (1) {
         clientlen = sizeof(clientaddr);
@@ -86,21 +93,28 @@ void *proxy_communicate(void *clientfd) {
     printf("\n*********ACCEPTING CONNECTION*********\n\n");
 
     int err = 0;                /* T/F for error catching */
+    
     int serverfd;               /* Server socket file descriptor */
     int client_fd;              /* Client socket file descriptor */
+    
     rio_t client_rio;           /* Robust wrapper for client IO  */
+    
     char req_dest[MAXLINE];     /* Request destination */
     char req_method[MAXLINE];   /* Request method      */
     char req_version[MAXLINE];  /* Request version     */
     char req_header[MAXLINE];   /* First line of incoming request: method, destination, version */
+    char req_buf[MAXLINE];      /* Formatted HTTP Request buffer  */
+    
     char server_host[MAXLINE];  /* Server hostname          */
     char server_path[MAXLINE];  /* Server path (query)      */
     char server_proto[MAXLINE]; /* Server protocol          */
     char server_port[5];        /* Server port (1024-65536) */
+    
     char resp_buf[MAXLINE];     /* Formatted HTTP Response buffer */
     int resp_buf_size;          /* Size of response buffer        */
-    char req_buf[MAXLINE];      /* Formatted HTTP Request buffer  */
-    char* cache_object;         /* Web object returned from cache */
+
+    char* cache_object = NULL;  /* Web object returned from cache */
+    int cache_object_size;      /* Size of web object returned from cache */
     
     memset(req_dest, 0, MAXLINE);
     memset(req_method, 0, MAXLINE);
@@ -152,11 +166,34 @@ void *proxy_communicate(void *clientfd) {
         printf("proxy_communicate: header: %s", req_header_arr[i]);
     }
 
-    /* Check if object is in the cache */
-    cache_object = getFromCache(req_dest);
-    if (cache_object != NULL) {
-        /* Send cached response */
+    /* Initialize read-write lock */
+    pthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;
+    err = pthread_rwlock_init(&rwlock, NULL);
+    if (err) {
+        clienterror(client_fd, "Lock", "500", "Internal Server Error", "Proxy cannot initialize thread lock");
         return NULL;
+    }
+
+    /* Get blocking write lock */
+    err = pthread_rwlock_wrlock(&rwlock);
+    if (err) {
+        clienterror(client_fd, "Lock", "500", "Internal Server Error", "Proxy cannot get a write thread lock");
+        return NULL;
+    }
+
+    /* Check if object is in the cache */
+    getFromCache(req_dest, cache_object, &cache_object_size);
+
+    /* Unlock blocking read lock */
+    err = pthread_rwlock_unlock(&rwlock);
+    if (err) {
+        clienterror(client_fd, "Lock", "500", "Internal Server Error", "Proxy cannot unlock a write thread lock");
+        return NULL;
+    }
+
+    /* Forward cached object to the client */
+    if (cache_object != NULL) {
+        forward_cached_response(client_fd, cache_object, cache_object_size);
     }
 
     /* Build the HTTP request */
@@ -182,7 +219,24 @@ void *proxy_communicate(void *clientfd) {
 
     /* Store the object in the cache */
     if (resp_buf != NULL) {
+
+        /* Get blocking write lock */
+        err = pthread_rwlock_wrlock(&rwlock);
+        if (err) {
+            clienterror(client_fd, "Lock", "500", "Internal Server Error", "Proxy cannot get a write thread lock");
+            return NULL;
+        }
+
+        /* Write to cache */
         addToCache(req_dest, resp_buf, resp_buf_size);
+
+        /* Unlock blocking write lock */
+        err = pthread_rwlock_unlock(&rwlock);
+        if (err) {
+            clienterror(client_fd, "Lock", "500", "Internal Server Error", "Proxy cannot unlock a write thread lock");
+            return NULL;
+        }
+
     } else {
         clienterror(client_fd, "Server connection", "500", "Internal Server Error", "Proxy cannot read server response");
         return NULL;
@@ -222,8 +276,8 @@ int forward_request(char *req, char *host, char *port) {
 /*
  * Send a cached response to the client.
  */
-int forward_cached_response(int clientfd, char *resp) {
-    return 0;
+void forward_cached_response(int clientfd, char *resp, int resp_size) {
+    Rio_writen(clientfd, resp, resp_size);
 }
 
 //////////
@@ -238,6 +292,7 @@ int forward_response(int clientfd, int serverfd, char *res, int *res_size) {
     size_t bytes_read = 0;          /* Number of bytes read from socket response       */
     int add_to_cache  = 1;          /* T/F if object should be added to the cache      */
     size_t total_bytes_read = 0;    /* Total number of bytes read from socket response */
+
 
     /* Associate client socket file descriptor with buffer */
     Rio_readinitb(&server_rio, serverfd);
