@@ -56,9 +56,6 @@ int main(int argc, char **argv) {
         perror("Open_listenfd");
     }
 
-    /* Initialize the cache */
-    construct_cache();
-
     while (1) {
         clientlen = sizeof(clientaddr);
 
@@ -70,7 +67,7 @@ int main(int argc, char **argv) {
 
         printf("main: Accepted connection from (%s, %s)\n", hostname, port);
         
-        /* Create the child process */
+        /* Create the thread */
         pthread_t tpid;       
         Pthread_create(&tpid, NULL, proxy_communicate, &connfd);
         Pthread_detach(tpid);
@@ -426,7 +423,7 @@ int parse_destination(char *dest, char *proto, char *host, char *port, char *pat
         /* Copy the port */
         memcpy(port, dest, diff);
 
-        /* Validate the port number */
+        /* Validate the port is an integer */
         int client_port;
         char *client_port_ptr;
         client_port = strtol(port, &client_port_ptr, 10);

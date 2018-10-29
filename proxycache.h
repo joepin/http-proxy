@@ -4,7 +4,7 @@
 #include <time.h>
 #include <stdio.h>
 
-#define MAX_CACHE_SIZE 1049000   /* Recommended max cache byte size      */
+#define MAX_CACHE_SIZE 1049000   /* Recommended max cache size           */
 #define MAX_CACHE_ELEMENTS 1000  /* Supported number of cache elements   */
 #define MAX_LFU_ELEMENTS 3       /* Supported number of LFU elements     */
 #define MAX_LRU_ELEMENTS 997     /* Supported number of LRU elements     */
