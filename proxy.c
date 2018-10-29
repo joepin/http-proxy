@@ -1,21 +1,19 @@
 #include <stdio.h>
 #include <string.h>
 #include "csapp.h"
-// #include "proxycache.h"
+#include "proxycache.h"
 
-// @TODO
-// - Cache
+//////////
 
-#define MAX_CACHE_SIZE 1049000   /* Recommended max cache byte size  */
 #define MAX_OBJECT_SIZE 102400   /* Recommended max object byte size */
 #define BODY_SIZE 4096           /* Default response body size       */ 
 #define MAX_HEADERS 20           /* Max number of headers supported  */
 
 //////////
 
-void proxy_communicate(int fd);
-int forward_response(int clientfd, int serverfd, char *buf);
-int forward_request(char *req, char *host, char *port, char *buf);
+void *proxy_communicate(void *fd);
+int forward_response(int clientfd, int serverfd, char *buf, int *buf_size);
+int forward_request(char *req, char *host, char *port);
 int parse_destination(char *dest, char *proto, char *host, char *port, char *path);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 int read_requesthdrs(rio_t *rp, char headers[MAX_HEADERS * sizeof(char *)][MAXLINE * sizeof(char)]);
@@ -58,6 +56,9 @@ int main(int argc, char **argv) {
         perror("Open_listenfd");
     }
 
+    /* Initialize the cache */
+    construct_cache();
+
     while (1) {
         clientlen = sizeof(clientaddr);
 
@@ -70,21 +71,9 @@ int main(int argc, char **argv) {
         printf("main: Accepted connection from (%s, %s)\n", hostname, port);
         
         /* Create the child process */
-        if (!Fork()) {
-            /* Child does not need the main socket connection */
-            Close(listenfd);
-
-            /* Handle an HTTP request and response */
-            proxy_communicate(connfd);
-
-            /* Close the client connection */
-            Close(connfd);
-
-            exit(0);
-        }
-
-        /* Close the socket */
-        Close(connfd);
+        pthread_t tpid;       
+        Pthread_create(&tpid, NULL, proxy_communicate, &connfd);
+        Pthread_detach(tpid);
     }
 
 }
@@ -96,11 +85,12 @@ int main(int argc, char **argv) {
  * This is the main driver of a single lifecycle.
  * Adopted from tiny.c.
  */
-void proxy_communicate(int client_fd) {
+void *proxy_communicate(void *clientfd) {
     printf("\n*********ACCEPTING CONNECTION*********\n\n");
 
     int err = 0;                /* T/F for error catching */
     int serverfd;               /* Server socket file descriptor */
+    int client_fd;              /* Client socket file descriptor */
     rio_t client_rio;           /* Robust wrapper for client IO  */
     char req_dest[MAXLINE];     /* Request destination */
     char req_method[MAXLINE];   /* Request method      */
@@ -110,8 +100,10 @@ void proxy_communicate(int client_fd) {
     char server_path[MAXLINE];  /* Server path (query)      */
     char server_proto[MAXLINE]; /* Server protocol          */
     char server_port[5];        /* Server port (1024-65536) */
-    char resp_buf[MAXLINE];     /* Formatted HTTP Request buffer  */
-    char req_buf[MAXLINE];      /* Formatted HTTP Response buffer */
+    char resp_buf[MAXLINE];     /* Formatted HTTP Response buffer */
+    int resp_buf_size;          /* Size of response buffer        */
+    char req_buf[MAXLINE];      /* Formatted HTTP Request buffer  */
+    char* cache_object;         /* Web object returned from cache */
     
     memset(req_dest, 0, MAXLINE);
     memset(req_method, 0, MAXLINE);
@@ -124,6 +116,8 @@ void proxy_communicate(int client_fd) {
     memset(resp_buf, 0, MAXLINE);
     memset(req_buf, 0, MAXLINE);
 
+    client_fd = *(int *)clientfd;
+
     /* Request headers */
     char req_header_arr[MAX_HEADERS * sizeof(char *)][MAXLINE * sizeof(char)];
 
@@ -134,7 +128,7 @@ void proxy_communicate(int client_fd) {
     if (!Rio_readlineb(&client_rio, req_header, MAXLINE)) {
         fprintf(stderr, "Proxy could not read first line of the request.\n");
         clienterror(client_fd, "Request headers", "400", "Bad Request", "Proxy cannot process this request");
-        return;
+        return NULL;
     }
 
     /* Ex: GET, http://localhost:41183/home.html, HTTP/1.1 */
@@ -144,14 +138,14 @@ void proxy_communicate(int client_fd) {
     if (strcasecmp(req_method, "GET")) {
         fprintf(stderr, "Proxy only recognizes GET requests.\n");
         clienterror(client_fd, req_method, "501", "Not Implemented", "Proxy does not implement this method");
-        return;
+        return NULL;
     }
 
     /* Read headers */
     int num_headers = read_requesthdrs(&client_rio, req_header_arr);
     if (num_headers == -1) {
         clienterror(client_fd, "Request headers", "400", "Bad Request", "Proxy cannot process this request");
-        return;
+        return NULL;
     }
 
     printf("proxy_communicate: method: %s\n", req_method);
@@ -161,26 +155,46 @@ void proxy_communicate(int client_fd) {
         printf("proxy_communicate: header: %s", req_header_arr[i]);
     }
 
+    /* Check if object is in the cache */
+    cache_object = getFromCache(req_dest);
+    if (cache_object != NULL) {
+        /* Send cached response */
+        return NULL;
+    }
+
     /* Build the HTTP request */
     err = build_http_request(req_buf, req_method, req_dest, server_host, server_port, server_path, server_proto);
     if (err) {
         clienterror(client_fd, "Request", "500", "Internal Server Error", "Proxy cannot process this request");
-        return;  
+        return NULL;
     }
 
     /* Send request */
-    serverfd = forward_request(req_buf, server_host, server_port, resp_buf);
+    serverfd = forward_request(req_buf, server_host, server_port);
     if (serverfd == -1) {
         clienterror(client_fd, "Server connection", "500", "Internal Server Error", "Proxy cannot connect to the server");
-        return;  
+        return NULL;
     }
 
     /* Send the response */
-    err = forward_response(client_fd, serverfd, resp_buf);
+    err = forward_response(client_fd, serverfd, resp_buf, &resp_buf_size);
     if (err) {
         clienterror(client_fd, "Server connection", "500", "Internal Server Error", "Proxy cannot read server response");
-        return;  
+        return NULL;
     }
+
+    /* Store the object in the cache */
+    if (resp_buf != NULL) {
+        addToCache(req_dest, resp_buf, resp_buf_size);
+    } else {
+        clienterror(client_fd, "Server connection", "500", "Internal Server Error", "Proxy cannot read server response");
+        return NULL;
+    }
+
+    /* Close the socket */
+    Close(client_fd);
+
+    return NULL;
 
 }
 
@@ -189,7 +203,7 @@ void proxy_communicate(int client_fd) {
 /*
  * Make the HTTP request.
  */
-int forward_request(char *req, char *host, char *port, char *buf) {
+int forward_request(char *req, char *host, char *port) {
     printf("\n*********FORWARDING REQUEST*********\n\n");
 
     int serverfd;   /* Server socket file descriptor */
@@ -209,9 +223,18 @@ int forward_request(char *req, char *host, char *port, char *buf) {
 //////////
 
 /*
+ * Send a cached response to the client.
+ */
+int forward_cached_response(int clientfd, char *resp) {
+    return 0;
+}
+
+//////////
+
+/*
  * Send a response to the client.
  */
-int forward_response(int clientfd, int serverfd, char *res) {
+int forward_response(int clientfd, int serverfd, char *res, int *res_size) {
     printf("\n*********FORWARDING RESPONSE*********\n\n");
 
     rio_t server_rio;               /* Robust wrapper for server IO                    */
@@ -226,7 +249,7 @@ int forward_response(int clientfd, int serverfd, char *res) {
     char buf[BODY_SIZE];
     memset(buf, 0, BODY_SIZE);
 
-    /* Local buffer of entire object */
+    /* Local buffer for entire object */
     char resp_buf[MAX_OBJECT_SIZE];
     memset(resp_buf, 0, MAX_OBJECT_SIZE);
 
@@ -256,9 +279,10 @@ int forward_response(int clientfd, int serverfd, char *res) {
     /* Check if object should be added to the cache */
     if (add_to_cache) {
         /* Create the cache entry */
-        void *cache_buf = Malloc(total_bytes_read);
-        memset(cache_buf, 0, total_bytes_read);
-        memcpy(cache_buf, resp_buf, total_bytes_read);
+        res = Malloc(total_bytes_read);
+        memset(res, 0, total_bytes_read);
+        memcpy(res, resp_buf, total_bytes_read);
+        *res_size = total_bytes_read;
     } 
 
     return 0;
