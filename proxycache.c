@@ -10,8 +10,10 @@
 
 typedef struct Node {
     char *buffer;                /* Buffer for web object                */
+    int buf_len;                 /* Size of buffer for web object        */
     time_t time;                 /* Time node was last accessed          */
     int frequency;               /* Frequency count of URL               */
+    char url[MAX_URL_CHARS];     /* URL string 						     */
     struct Node *left;           /* Pointer to left node in linked list  */
     struct Node *right;          /* Pointer to right node in linked list */
 } Node;
@@ -42,7 +44,7 @@ typedef struct Hash_Table {      /* Hash table                            */
 //////////
 
 static List LFU_cache;			 /* Least Frequently Used cache 		  */
-static List LRU_cache;			 /* Least Recently Used cache (queue)     */
+static List LRU_cache;			 /* Least Recently Used cache 			  */
 static Hash_Table hash_table;    /* Hash table 					 		  */
 
 //////////
@@ -68,31 +70,47 @@ static int hash(char *url) {
 
 //////////
 
-/* Remove a node from the linked list */
-static void removeFromCache(List cache, Node* node) {
+/* Remove a node from the linked list. Do not update the hash table */
+/* values - this function is used for reordering. popCache is used  */
+/* for permanent removal.										    */
+static void removeForInsert(List cache, Node* node) {
     printf("\n*********REMOVING OBJECT FROM CACHE*********\n\n");
 
 }
 
 //////////
 
-/* Insert a node into the linked list */
-static void insertIntoCache(List cache, Node* node) {
-    printf("\n*********INSERTING OBJECT INTO CACHE*********\n\n");
-
-}
-
-//////////
-
-/* Pop the last element of a queue */
+/* Pop the last element of the linked list. */
 static void popCache(List cache) {
     printf("\n*********POPPING OBJECT FROM CACHE*********\n\n");
-	removeFromCache(cache, cache.tail);
+	
+	int key;  			/* Key for the hash table 		  */
+	Hash_Node *node;	/* Value returned from hash table */
+
+	/* Hash incoming URL */
+	key = hash(cache.tail->url);
+
+	/* Get the value */
+	node = hash_table.table[key];
+
+	/* Update the hash table values */
+	node->LFU_element = NULL;
+	node->LRU_element = NULL;
+	node->frequency = 0;
+
+	/* Decrement the hash table size */
+	hash_table.size--;
+
+	/* Decrement the hash table size in bytes */
+	hash_table.cache_size -= cache.tail->buf_len;
+
+	/* Remove object from the cache */
+	removeForInsert(cache, cache.tail);
 }
 
 //////////
 
-/* Push a node onto the queue */
+/* Push a node onto the linked list. */
 static void pushIntoCache(List cache, Node* node) {
     printf("\n*********PUSHING OBJECT INTO CACHE*********\n\n");
 
@@ -101,8 +119,6 @@ static void pushIntoCache(List cache, Node* node) {
     	popCache(cache);
     }
 
-    /* Add node to cache */
-	insertIntoCache(cache, node);
 }
 
 //////////
@@ -145,12 +161,14 @@ void addToCache(char *url, char *object, int object_size) {
     node->time = hash_node->time;
     node->left = NULL;
     node->right = NULL;
+    node->buf_len = object_size;
+    strcpy(node->url, url);
 
     /* If there is room in LFU, add the node. */
     /* If added to LFU, don't add to LRU.     */
     if (LFU_cache.size < MAX_LFU_ELEMENTS) {
     	hash_node->LFU_element = node;
-    	insertIntoCache(LFU_cache, node);
+    	pushIntoCache(LFU_cache, node);
     	return;
     }
 
@@ -160,7 +178,7 @@ void addToCache(char *url, char *object, int object_size) {
 	if (LFU_cache.tail != NULL) {
 		if (node->frequency > LFU_cache.tail->frequency) {
 			hash_node->LFU_element = node;
-    		insertIntoCache(LFU_cache, node);
+    		pushIntoCache(LFU_cache, node);
 			return;
 		}
 	}
@@ -207,8 +225,8 @@ void getFromCache(char *url, char *object, int *object_size) {
 
 		/* Reorder the cache */
 		if (node->LFU_element != LFU_cache.head) {
-			removeFromCache(LFU_cache, node->LFU_element);
-			insertIntoCache(LFU_cache, node->LFU_element);
+			removeForInsert(LFU_cache, node->LFU_element);
+			pushIntoCache(LFU_cache, node->LFU_element);
 		}
 
 		return;
@@ -227,7 +245,7 @@ void getFromCache(char *url, char *object, int *object_size) {
 		/* Check if node can go in LFU */
 		if (LFU_cache.tail != NULL) {
 			if (node->LRU_element->frequency > LFU_cache.tail->frequency) {
-				removeFromCache(LRU_cache, node->LRU_element);
+				removeForInsert(LRU_cache, node->LRU_element);
 				pushIntoCache(LFU_cache, node->LRU_element);
 				return;
 			}
@@ -235,7 +253,7 @@ void getFromCache(char *url, char *object, int *object_size) {
 
 		/* Reorder the cache */
 		if (node->LRU_element != LRU_cache.head) {
-			removeFromCache(LRU_cache, node->LRU_element);
+			removeForInsert(LRU_cache, node->LRU_element);
 			pushIntoCache(LRU_cache, node->LRU_element);
 		}
 
