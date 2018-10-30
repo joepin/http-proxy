@@ -160,7 +160,9 @@ void getFromCache(char *url, char *object, int *object_size) {
 
 	/* Search table for url */
     for (int i = 0; i < MAX_LRU_ELEMENTS; i++) {
-    	if (strcmp(cache[i]->url, url) != 0) {
+    	if (strcmp(cache[i]->url, url) == 0) {
+    		printf("MATCH\n");
+    		printf("input: %s cache: %s\n", url, cache[i]->url);
 			node = cache[i];
 			break;
     	}
@@ -174,6 +176,10 @@ void getFromCache(char *url, char *object, int *object_size) {
 
 	/* Set object */
 	object = node->buf;
+	*object_size = node->buf_len;
+
+	printf("buffer %s\n", node->buf);
+	printf("buffer len %d\n", node->buf_len);
 
 	/* Update the time */
 	node->time = time(NULL);
