@@ -21,10 +21,10 @@ echo "Curl request to http://www.google.com"
 curl -v --proxy http://localhost:$PORT http://www.google.com
 echo ""
 
-# echo "Curl request to http://www.beej.us/guide/bgnet/html/single/bgnet.html"
-# curl -v --proxy http://localhost:$PORT http://www.beej.us/guide/bgnet/html/single/bgnet.html
-# echo ""
+echo "Curl request to http://www.beej.us/guide/bgnet/html/single/bgnet.html"
+curl -v --proxy http://localhost:$PORT http://www.beej.us/guide/bgnet/html/single/bgnet.html
+echo ""
 
-# echo "Killing proxy and tiny server"
-# pgrep -f tiny | $(awk '{print "kill " $1}')
-# pgrep -f proxy | $(awk '{print "kill " $1}')
+echo "Killing proxy and tiny server"
+pgrep -f tiny | $(awk '{print "kill " $1}')
+pgrep -f proxy | $(awk '{print "kill " $1}')
