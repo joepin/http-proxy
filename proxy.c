@@ -14,7 +14,7 @@
 void *proxy_communicate(void *fd);
 int forward_request(char *req, char *host, char *port);
 void forward_cached_response(int clientfd, char *resp, int resp_size);
-int forward_response(int clientfd, int serverfd, char *buf, int *buf_size);
+int forward_response(int clientfd, int serverfd, char **buf, int *buf_size);
 int parse_destination(char *dest, char *proto, char *host, char *port, char *path);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 int read_requesthdrs(rio_t *rp, char headers[MAX_HEADERS * sizeof(char *)][MAXLINE * sizeof(char)]);
@@ -78,6 +78,7 @@ int main(int argc, char **argv) {
         pthread_t tpid;       
         Pthread_create(&tpid, NULL, proxy_communicate, &connfd);
         Pthread_detach(tpid);
+
     }
 
 }
@@ -110,7 +111,7 @@ void *proxy_communicate(void *clientfd) {
     char server_proto[MAXLINE]; /* Server protocol          */
     char server_port[5];        /* Server port (1024-65536) */
     
-    char resp_buf[MAXLINE];     /* Formatted HTTP Response buffer */
+    char *resp_buf = NULL;      /* Formatted HTTP Response buffer */
     int resp_buf_size;          /* Size of response buffer        */
 
     char* cache_object = NULL;  /* Web object returned from cache */
@@ -124,7 +125,6 @@ void *proxy_communicate(void *clientfd) {
     memset(server_path, 0, MAXLINE);
     memset(server_proto, 0, MAXLINE);
     memset(server_port, 0, 5);
-    memset(resp_buf, 0, MAXLINE);
     memset(req_buf, 0, MAXLINE);
 
     client_fd = *(int *)clientfd;
@@ -182,7 +182,7 @@ void *proxy_communicate(void *clientfd) {
     }
 
     /* Check if object is in the cache */
-    getFromCache(req_dest, cache_object, &cache_object_size);
+    getFromCache(req_dest, &cache_object, &cache_object_size);
 
     /* Unlock blocking read lock */
     err = pthread_rwlock_unlock(&rwlock);
@@ -194,6 +194,11 @@ void *proxy_communicate(void *clientfd) {
     /* Forward cached object to the client */
     if (cache_object != NULL) {
         forward_cached_response(client_fd, cache_object, cache_object_size);
+
+        /* Close the socket */
+        Close(client_fd);
+
+        return NULL;
     }
 
     /* Build the HTTP request */
@@ -211,7 +216,7 @@ void *proxy_communicate(void *clientfd) {
     }
 
     /* Send the response */
-    err = forward_response(client_fd, serverfd, resp_buf, &resp_buf_size);
+    err = forward_response(client_fd, serverfd, &resp_buf, &resp_buf_size);
     if (err) {
         clienterror(client_fd, "Server connection", "500", "Internal Server Error", "Proxy cannot read server response");
         return NULL;
@@ -285,7 +290,7 @@ void forward_cached_response(int clientfd, char *resp, int resp_size) {
 /*
  * Send a response to the client.
  */
-int forward_response(int clientfd, int serverfd, char *res, int *res_size) {
+int forward_response(int clientfd, int serverfd, char **res, int *res_size) {
     printf("\n*********FORWARDING RESPONSE*********\n\n");
 
     rio_t server_rio;               /* Robust wrapper for server IO                    */
@@ -331,9 +336,9 @@ int forward_response(int clientfd, int serverfd, char *res, int *res_size) {
     /* Check if object should be added to the cache */
     if (add_to_cache) {
         /* Create the cache entry */
-        res = Malloc(total_bytes_read);
-        memset(res, 0, total_bytes_read);
-        memcpy(res, resp_buf, total_bytes_read);
+        *res = (char *)Malloc(total_bytes_read);
+        memset(*res, 0, total_bytes_read);
+        memcpy(*res, resp_buf, total_bytes_read);
         *res_size = total_bytes_read;
     } 
 

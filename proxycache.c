@@ -60,6 +60,7 @@ void addToCache(char *url, char *object, int object_size) {
     printf("Current number of elements: %d\n", num_nodes);
     printf("Available memeory in cache: %d\n", (MAX_CACHE_SIZE - cache_size));
     printf("Is space available: %d\n", (num_nodes != MAX_LRU_ELEMENTS));
+    printf("Object %s\n", object);
 
     /* Check if the object fits in the cache */
     if (object_size >= MAX_OBJECT_SIZE) {
@@ -152,7 +153,7 @@ void addToCache(char *url, char *object, int object_size) {
 //////////
 
 /* Get an object from the cache */
-void getFromCache(char *url, char *object, int *object_size) {
+void getFromCache(char *url, char **object, int *object_size) {
     printf("\n*********GETTING OBJECT FROM CACHE*********\n\n");
 
     /* Value returned from the table */
@@ -175,11 +176,8 @@ void getFromCache(char *url, char *object, int *object_size) {
 	}
 
 	/* Set object */
-	object = node->buf;
+	*object = node->buf;
 	*object_size = node->buf_len;
-
-	printf("buffer %s\n", node->buf);
-	printf("buffer len %d\n", node->buf_len);
 
 	/* Update the time */
 	node->time = time(NULL);

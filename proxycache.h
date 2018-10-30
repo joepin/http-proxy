@@ -18,7 +18,7 @@
 /* Main cache functions */
 void constructCache();
 void addToCache(char *url, char *object, int object_size);
-void getFromCache(char *url, char *object, int *object_size);
+void getFromCache(char *url, char **object, int *object_size);
 
 //////////
 
