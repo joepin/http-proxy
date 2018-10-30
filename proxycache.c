@@ -162,8 +162,6 @@ void getFromCache(char *url, char **object, int *object_size) {
 	/* Search table for url */
     for (int i = 0; i < MAX_LRU_ELEMENTS; i++) {
     	if (strcmp(cache[i]->url, url) == 0) {
-    		printf("MATCH\n");
-    		printf("input: %s cache: %s\n", url, cache[i]->url);
 			node = cache[i];
 			break;
     	}
